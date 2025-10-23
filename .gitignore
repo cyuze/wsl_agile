@@ -1,0 +1,9 @@
+# Buildozer関連
+.buildozer/
+bin/
+
+# Python関連
+__pycache__/
+*.pyc
+*.pyo
+
