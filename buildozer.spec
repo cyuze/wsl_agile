@@ -3,6 +3,22 @@
 # It largely follows the syntax of an .ini file.
 # See the end of the file for more details and warnings about common mistakes.
 [app]
+
+# QRコードに必要なカメラ機能
+# アプリ権限許可
+
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,ACCESS_BACKGROUND_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA
+
+
+# QRコードに必要な読み取り機能
+android.requirements = python3,kivy,kivymd,opencv,pyzbar,pillow,supabase
+
+#android.environを追記
+android.environ = KIVY_NO_SYSTEM_CONFIG=1,KIVY_NO_ARGS=1
+
+#garden_requirementsを追記
+garden_requirements = mapview
+
 # (str) Title of your application
 title = My Application
 # (str) Package name
@@ -14,7 +30,9 @@ source.dir = .
 # (list) Source files to include (leave empty to include all the files)
 source.include_exts = py,png,jpg,kv,atlas,ttf
 # (list) List of inclusions using pattern matching
-source.include_patterns = assets/*,images/*.png.ttf
+
+# ここに .envを追加
+source.include_patterns = assets/*,images/*.png.ttf/.env
 # (list) Source files to exclude (leave empty to not exclude anything)
 #source.exclude_exts = spec
 # (list) List of directory to exclude (leave empty to not exclude anything)
@@ -29,8 +47,10 @@ version = 0.1
 # version.filename = %(source.dir)s/main.py
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-# requirementsにgarden.mapviewを追記
-requirements = python3,kivy_garden.mapview,kivy
+
+# requirementsにgarden.mapview、plyer、requestsを追記
+requirements = python3,kivy,plyer,requests,kivy_garden.mapview,python-dotenv
+
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes
 # requirements.source.kivy = ../../kivy
@@ -77,14 +97,19 @@ fullscreen = 0
 #icon.adaptive_background.filename = %(source.dir)s/data/icon_bg.png
 # (list) Permissions
 # (See https://python-for-android.readthedocs.io/en/latest/buildoptions.html for all the supported syntaxes and properties)
-#android.permissionのコメントアウトを外す＆追記
-android.permissions = INTERNET,ACCESS_NETWORK_STATE,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,READ_EXTERNAL_STORAGE,READ_MEDIA_IMAGES
+
 # (list) features (adds uses-feature -tags to manifest)
-#android.features = android.hardware.usb.host
+#android.features 削除：android.hardware.usb.host　追記：android.hardware.location, android.hardware.location.gps -> やっぱり全部コメントアウト
+#android.features = android.hardware.location, android.hardware.location.gps
+
 # (int) Target Android API, should be as high as possible.
-#android.api = 33
+#コメントアウトを外す
+android.api = 33
+
 # (int) Minimum API your APK / AAB will support.
-#android.minapi = 21
+#コメントアウトを外す
+android.minapi = 21
+
 # (int) Android SDK version to use
 #android.sdk = 20
 # (str) Android NDK version to use
@@ -161,7 +186,13 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,ACCESS_FINE_LOCATION,ACCESS_
 # (bool) Enable AndroidX support. Enable when 'android.gradle_dependencies'
 # contains an 'androidx' package, or any package from Kotlin source.
 # android.enable_androidx requires android.api >= 28
-#android.enable_androidx = True
+#コメントを外した
+android.enable_androidx = True
+
+#追記
+android.targetapi = 34
+android.enable_jetifier = True
+
 # (list) add java compile options
 # this can for example be necessary when importing certain java libraries using the 'android.gradle_dependencies' option
 # see https://developer.android.com/studio/write/java8-support for further information
@@ -223,7 +254,8 @@ android.archs = arm64-v8a, armeabi-v7a
 # this is not the same as app version and should only be edited if you know what you're doing
 # android.numeric_version = 1
 # (bool) enables Android auto backup feature (Android API >=23)
-android.allow_backup = True
+android.allow_backup = False
+
 # (str) XML file for custom backup rules (see official auto backup documentation)
 # android.backup_rules =
 # (str) If you need to insert variables into your AndroidManifest.xml file,
@@ -366,5 +398,3 @@ warn_on_root = 1
 #        buildozer --profile demo android debug
 #
 #   Environment variable overrides have priority over profile overrides.
-//garden_requirementsを追記
-garden_requirements = mapview
