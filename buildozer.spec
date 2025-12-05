@@ -5,6 +5,15 @@
 
 [app]
 
+# QRコードに必要なカメラ機能
+# アプリ権限許可
+android.permissions = CAMERA, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, INTERNET
+
+
+# QRコードに必要な読み取り機能
+android.requirements = python3,kivy,kivymd,opencv,pyzbar,pillow,supabase
+
+
 # (str) Title of your application
 title = My Application
 
@@ -479,3 +488,7 @@ warn_on_root = 1
 #        buildozer --profile demo android debug
 #
 #   Environment variable overrides have priority over profile overrides.
+
+
+
+
