@@ -11,6 +11,8 @@ from kivy.clock import Clock
 import random
 import requests
 import json
+from chat_screen import MainLayout  # この行を追加
+
 
 # Android 権限
 try:
@@ -130,8 +132,9 @@ class ImageButton(ButtonBehavior, FloatLayout):
 # メイン画面
 # ===============================================================
 class MainScreen(FloatLayout):
-    def __init__(self, **kwargs):
+    def __init__(self, app_instance=None, **kwargs):  # app_instance=Noneを追加
         super().__init__(**kwargs)
+        self.app_instance = app_instance  # この行を追加
         Window.clearcolor = (1,1,1,1)
 
         self.friend_meetings = {}
@@ -143,17 +146,36 @@ class MainScreen(FloatLayout):
         self.mapview = MapView(lat=39.701083, lon=141.136132, zoom=14, map_source=GSImapSource())
         self.add_widget(self.mapview)
 
-        # 下部ボタン
-        btns = [{'image':'img/friend.png','x':0.2},
-                {'image':'img/chat.png','x':0.4},
-                {'image':'img/map.png','x':0.6},
-                {'image':'img/settings.png','x':0.8}]
-        for b in btns:
-            btn = ImageButton(image_source=b['image'], size_hint=(None,None), size=(140,140), pos_hint={'center_x':b['x'],'y':0.05})
-            btn.bind(on_press=lambda i,name=b['image']: print(f"{name} ボタンが押されました"))
-            self.add_widget(btn)
+        # ========================
+        # 4つのボタン
+        # ========================
+        btn_friend = ImageButton(image_source='img/friend.png',
+                                 size_hint=(None,None), size=(140,140),
+                                 pos_hint={'center_x':0.2, 'y':0.05})
+        btn_friend.bind(on_press=self.on_friend_button)
+        self.add_widget(btn_friend)
 
-        # GPS
+        btn_chat = ImageButton(image_source='img/chat.png',
+                               size_hint=(None,None), size=(140,140),
+                               pos_hint={'center_x':0.4, 'y':0.05})
+        btn_chat.bind(on_press=self.on_chat_button)
+        self.add_widget(btn_chat)
+
+        btn_map = ImageButton(image_source='img/map.png',
+                              size_hint=(None,None), size=(140,140),
+                              pos_hint={'center_x':0.6, 'y':0.05})
+        btn_map.bind(on_press=self.on_map_button)
+        self.add_widget(btn_map)
+
+        btn_settings = ImageButton(image_source='img/settings.png',
+                                   size_hint=(None,None), size=(140,140),
+                                   pos_hint={'center_x':0.8, 'y':0.05})
+        btn_settings.bind(on_press=self.on_settings_button)
+        self.add_widget(btn_settings)
+
+        # ========================
+        # GPS / デバッグモード
+        # ========================
         if HAS_GPS:
             try:
                 gps.configure(on_location=self.on_location, on_status=self.on_status)
@@ -167,6 +189,25 @@ class MainScreen(FloatLayout):
             self.start_debug_mode()
 
         Clock.schedule_interval(self.update_friends, 5)
+
+
+    # ======================================
+    # 4つのボタン処理
+    # ======================================
+    def on_friend_button(self, instance):
+        print("👥 友だちボタンが押されました")
+
+    def on_chat_button(self, instance):
+        print("💬 チャットボタンが押されました")
+        if self.app_instance:  # この行を追加
+            self.app_instance.open_chat_list()  # この行を追加
+
+    def on_map_button(self, instance):
+        print("🗺️ マップボタンが押されました")
+
+    def on_settings_button(self, instance):
+        print("⚙️ 設定ボタンが押されました")
+
 
     # ===========================================================
     # GPS / デバッグ
@@ -295,7 +336,22 @@ class MainScreen(FloatLayout):
 class MyApp(App):
     def build(self):
         request_location_permissions()
-        return MainScreen()
+        self.main_screen = MainScreen(app_instance=self)  # 変更
+        return self.main_screen  # 追加
+        
+    # 以下を追加
+    def open_chat_list(self):
+        """チャット一覧画面を開く"""
+        from chat_screen import MainLayout
+        self.root.clear_widgets()
+        chat_layout = MainLayout(app_instance=self)
+        self.root.add_widget(chat_layout)
+    
+    def back_to_map(self):
+        """マップ画面に戻る"""
+        self.root.clear_widgets()
+        self.main_screen = MainScreen(app_instance=self)
+        self.root.add_widget(self.main_screen)
 
 if __name__ == '__main__':
     MyApp().run()
