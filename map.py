@@ -58,7 +58,7 @@ class GSImapSource(MapSource):
         )
 
 # ===============================================================
-# 丸アイコン（Stencil） - タッチ透過
+# 丸アイコン（Stencil）
 # ===============================================================
 class CircleImageView(StencilView):
     def __init__(self, source, **kwargs):
@@ -156,11 +156,14 @@ class MainScreen(FloatLayout):
         btn_friend.bind(on_press=self.on_friend_button)
         self.add_widget(btn_friend)
 
-        btn_chat = ImageButton(image_source='img/chat.png',
-                               size_hint=(None,None), size=(140,140),
-                               pos_hint={'center_x':0.4, 'y':0.05})
+        btn_chat = ImageButton(
+            image_source='img/chat.png',
+            size_hint=(None,None), size=(140,140),
+            pos_hint={'center_x':0.4, 'y':0.05}
+        )
         btn_chat.bind(on_press=self.on_chat_button)
         self.add_widget(btn_chat)
+
 
         btn_map = ImageButton(image_source='img/map.png',
                               size_hint=(None,None), size=(140,140),

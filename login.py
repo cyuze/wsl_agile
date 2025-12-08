@@ -233,11 +233,8 @@ class WaitingApp(App):
     
     def open_map_screen(self):
         """map画面を開く"""
-        # rootがScreenManagerの場合、Screenでラップして追加
         if isinstance(self.root, ScreenManager):
-            # MapScreenが既に存在するか確認
             if not self.root.has_screen("map"):
-                # MainScreenをScreenでラップ
                 class MapScreen(Screen):
                     def __init__(self, app_inst, **kwargs):
                         super().__init__(name="map", **kwargs)
@@ -247,10 +244,8 @@ class WaitingApp(App):
                 map_screen = MapScreen(app_inst=self)
                 self.root.add_widget(map_screen)
             
-            # map画面に遷移
             self.root.current = "map"
         else:
-            # rootがScreenManagerでない場合（念のため）
             self.root.clear_widgets()
             self.main_screen = MainScreen(app_instance=self)
             self.root.add_widget(self.main_screen)
@@ -263,27 +258,89 @@ class WaitingApp(App):
         self.screen_manager.add_widget(AccountScreen(name="account"))
         self.screen_manager.add_widget(PictureScreen(name="picture"))
         self.root.add_widget(self.screen_manager)
-    
-    # def get_user_id(self):
-    #     """現在ログイン中のユーザーIDを取得"""
-    #     if self.current_user:
-    #         return self.current_user.get("user_id")
-    #     return None
-    
-    # def get_user_name(self):
-    #     """現在ログイン中のユーザー名を取得"""
-    #     if self.current_user:
-    #         return self.current_user.get("user_name")
-    #     return None
-    
-    # def is_logged_in(self):
-    #     """ログイン状態を確認"""
-    #     return self.current_user is not None
-    
-    # def logout(self):
-    #     """ログアウト"""
-    #     self.current_user = None
-    #     self.back_to_login()
+
+    # ======================================================
+    # ここから修正版（チャット機能の画面遷移）
+    # ======================================================
+
+    def open_chat_list(self):
+        """チャット一覧画面を開く"""
+        from chat_screen import MainLayout
+
+        if isinstance(self.root, ScreenManager):
+
+            # 同じ画面がないかチェック
+            if not self.root.has_screen("chat_list"):
+                
+                class ChatListScreen(Screen):
+                    def __init__(self, app_inst, **kwargs):
+                        super().__init__(name="chat_list", **kwargs)
+                        layout = MainLayout(app_instance=app_inst)
+                        self.add_widget(layout)
+                
+                new_screen = ChatListScreen(app_inst=self)
+                self.root.add_widget(new_screen)
+
+            # 画面遷移
+            self.root.current = "chat_list"
+
+
+    def open_chat(self, my_id, target_id):
+        """個別チャット画面を開く"""
+        from personal_chat_screen import ChatScreen
+
+        if isinstance(self.root, ScreenManager):
+
+            screen_name = f"chat_{my_id}_{target_id}"
+
+            if not self.root.has_screen(screen_name):
+
+                class PersonalChatScreen(Screen):
+                    def __init__(self, my_id, target_id, app_inst, **kwargs):
+                        super().__init__(name=screen_name, **kwargs)
+                        chat = ChatScreen(my_id, target_id, app_instance=app_inst)
+                        self.add_widget(chat)
+
+                new_screen = PersonalChatScreen(my_id, target_id, app_inst=self)
+                self.root.add_widget(new_screen)
+
+            # 画面遷移
+            self.root.current = screen_name
+
+
+    def back_to_list(self):
+        """チャット一覧に戻る"""
+        self.open_chat_list()
+
+
+    def back_to_map(self):
+        """マップ画面に戻る"""
+        if isinstance(self.root, ScreenManager) and self.root.has_screen("map"):
+            self.root.current = "map"
+        else:
+            from map import MainScreen
+            self.root.clear_widgets()
+            self.main_screen = MainScreen(app_instance=self)
+            self.root.add_widget(self.main_screen)
+
+
+    def open_settings(self):
+        """設定画面を開く"""
+        from settings import SettingsScreen
+
+        if isinstance(self.root, ScreenManager):
+            if not self.root.has_screen("settings"):
+                
+                class SettingsWrap(Screen):
+                    def __init__(self, app_inst, **kwargs):
+                        super().__init__(name="settings", **kwargs)
+                        layout = SettingsScreen(app_instance=app_inst)
+                        self.add_widget(layout)
+
+                s = SettingsWrap(app_inst=self)
+                self.root.add_widget(s)
+
+            self.root.current = "settings"
 
 
 if __name__ == "__main__":
