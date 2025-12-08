@@ -99,7 +99,7 @@ class RoundedButton(Button):
 # 設定画面
 # class SettingsScreen(BoxLayout, Screen):
 class SettingsScreen(Screen):
-    def __init__(self, app_instance=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         # 全体を縦に並べるレイアウト
