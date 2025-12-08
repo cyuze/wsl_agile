@@ -12,6 +12,7 @@ import random
 import requests
 import json
 from chat_screen import MainLayout  # この行を追加
+from settings import SettingsScreen  # この行を追加(settings)
 
 
 # Android 権限
@@ -209,6 +210,9 @@ class MainScreen(FloatLayout):
 
     def on_settings_button(self, instance):
         print("⚙️ 設定ボタンが押されました")
+        if self.app_instance:
+            self.app_instance.open_settings()
+
 
     # ===========================================================
     # GPS / デバッグ
@@ -359,6 +363,15 @@ class MyApp(App):
         self.root.clear_widgets()
         self.main_screen = MainScreen(app_instance=self)
         self.root.add_widget(self.main_screen)
+        
+
+    def open_settings(self):  # このメソッドを追加
+        """設定画面を開く"""
+        from settings import SettingsScreen
+        self.root.clear_widgets()
+        settings_screen = SettingsScreen(app_instance=self)
+        self.root.add_widget(settings_screen)
+    
 
 if __name__ == '__main__':
     MyApp().run()
