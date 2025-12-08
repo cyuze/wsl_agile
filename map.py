@@ -12,6 +12,7 @@ import random
 import requests
 import json
 from chat_screen import MainLayout  # この行を追加
+from settings import SettingsScreen  # この行を追加(settings)
 
 
 # Android 権限
@@ -195,7 +196,9 @@ class MainScreen(FloatLayout):
     # 4つのボタン処理
     # ======================================
     def on_friend_button(self, instance):
-        print("👥 友だちボタンが押されました")
+        print("💬 友達が押されました")
+        if self.app_instance:  # この行を追加
+            self.app_instance.open_friend_request()  # この行を追加
 
     def on_chat_button(self, instance):
         print("💬 チャットボタンが押されました")
@@ -207,6 +210,8 @@ class MainScreen(FloatLayout):
 
     def on_settings_button(self, instance):
         print("⚙️ 設定ボタンが押されました")
+        if self.app_instance:
+            self.app_instance.open_settings()
 
 
     # ===========================================================
@@ -338,7 +343,7 @@ class MyApp(App):
         request_location_permissions()
         self.main_screen = MainScreen(app_instance=self)  # 変更
         return self.main_screen  # 追加
-        
+    
     # 以下を追加
     def open_chat_list(self):
         """チャット一覧画面を開く"""
@@ -347,11 +352,38 @@ class MyApp(App):
         chat_layout = MainLayout(app_instance=self)
         self.root.add_widget(chat_layout)
     
+    def open_chat(self, my_id, target_id):  # このメソッドを追加
+        """個別チャット画面を開く"""
+        from personal_chat_screen import ChatScreen
+        self.root.clear_widgets()
+        chat_screen = ChatScreen(my_id, target_id, app_instance=self)
+        self.root.add_widget(chat_screen)
+        
+    def back_to_list(self):  # このメソッドも追加（チャットからリストに戻る用）
+        """チャット一覧に戻る"""
+        self.open_chat_list()
+    
+            
+    def open_friend_request(self):
+        from friend_request import FriendRequestScreen
+        self.root.clear_widgets()
+        screen = FriendRequestScreen()
+        self.root.add_widget(screen)
+            
     def back_to_map(self):
         """マップ画面に戻る"""
         self.root.clear_widgets()
         self.main_screen = MainScreen(app_instance=self)
         self.root.add_widget(self.main_screen)
+        
+
+    def open_settings(self):  # このメソッドを追加
+        """設定画面を開く"""
+        from settings import SettingsScreen
+        self.root.clear_widgets()
+        settings_screen = SettingsScreen(app_instance=self)
+        self.root.add_widget(settings_screen)
+    
 
 if __name__ == '__main__':
     MyApp().run()
