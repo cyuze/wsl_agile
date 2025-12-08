@@ -10,17 +10,19 @@ from kivy.utils import get_color_from_hex
 from kivy.graphics import Color, RoundedRectangle
 from kivy.metrics import dp, sp
 from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
+from kivy.uix.popup import Popup
 from account import AccountScreen
 from picture import PictureScreen
-
-
+from map import MainScreen
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 
+
 class LoginForm(BoxLayout):
-    def __init__(self, screen_manager=None, **kwargs):
+    def __init__(self, screen_manager=None, app_instance=None, **kwargs):
         super().__init__(**kwargs)
         self.screen_manager = screen_manager
+        self.app_instance = app_instance
         self.orientation = "vertical"
         self.size_hint = (None, None)
         
@@ -78,6 +80,7 @@ class LoginForm(BoxLayout):
             font_size=normal_font_size,
             size_hint=(1, None),
             height=dp(45),
+            multiline=False,
             background_color=get_color_from_hex('#ECF4E8'),
             padding=[dp(10), dp(12), dp(10), dp(12)]
         )
@@ -91,6 +94,7 @@ class LoginForm(BoxLayout):
             password=True,
             size_hint=(1, None),
             height=dp(45),
+            multiline=False,
             background_color=get_color_from_hex('#ECF4E8'),
             padding=[dp(10), dp(12), dp(10), dp(12)]
         )
@@ -128,6 +132,9 @@ class LoginForm(BoxLayout):
 
         def on_login_release(instance):
             self.login_bg_color.rgba = get_color_from_hex('#ABE782')
+            # 直接map画面に遷移
+            if self.app_instance:
+                self.app_instance.open_map_screen()
 
         login_btn.bind(on_press=on_login_press, on_release=on_login_release)
 
@@ -170,11 +177,24 @@ class LoginForm(BoxLayout):
 
         self.add_widget(signup_btn)
         self.add_widget(Widget(size_hint_y=None, height=dp(10)))
+    
+    def show_popup(self, message):
+        width = Window.width
+        popup_width = min(width * 0.8, dp(300))
+        
+        popup = Popup(
+            title='通知',
+            content=Label(text=message, font_name="Japanese", font_size=sp(14)),
+            size_hint=(None, None),
+            size=(popup_width, dp(180))
+        )
+        popup.open()
 
 
 class LoginScreen(Screen):
-    def __init__(self, **kwargs):
+    def __init__(self, app_instance=None, **kwargs):
         super().__init__(**kwargs)
+        self.app_instance = app_instance
 
         Window.clearcolor = get_color_from_hex('#ECF4E8')
 
@@ -182,27 +202,88 @@ class LoginScreen(Screen):
         from kivy.uix.anchorlayout import AnchorLayout
         anchor = AnchorLayout(anchor_x='center', anchor_y='center')
         
-        self.form = LoginForm(screen_manager=None)
+        self.form = LoginForm(screen_manager=None, app_instance=app_instance)
         self.form.build_ui()
         anchor.add_widget(self.form)
         
         self.add_widget(anchor)
     
     def on_enter(self):
-        # 画面に入った時にscreen_managerを設定
         self.form.screen_manager = self.manager
 
 
 class WaitingApp(App):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # ログイン中のユーザー情報を保持
+        self.current_user = None
+        self.main_screen = None
+        self.screen_manager = None
+    
     def build(self):
         self.title = "待ち合わせアプリ"
         
-        sm = ScreenManager(transition=NoTransition())
-        sm.add_widget(LoginScreen(name="login"))
-        sm.add_widget(AccountScreen(name="account"))
-        sm.add_widget(PictureScreen(name="picture"))
+        # ScreenManagerを作成して保存
+        self.screen_manager = ScreenManager(transition=NoTransition())
+        self.screen_manager.add_widget(LoginScreen(name="login", app_instance=self))
+        self.screen_manager.add_widget(AccountScreen(name="account"))
+        self.screen_manager.add_widget(PictureScreen(name="picture"))
         
-        return sm
+        return self.screen_manager
+    
+    def open_map_screen(self):
+        """map画面を開く"""
+        # rootがScreenManagerの場合、Screenでラップして追加
+        if isinstance(self.root, ScreenManager):
+            # MapScreenが既に存在するか確認
+            if not self.root.has_screen("map"):
+                # MainScreenをScreenでラップ
+                class MapScreen(Screen):
+                    def __init__(self, app_inst, **kwargs):
+                        super().__init__(name="map", **kwargs)
+                        self.main_screen = MainScreen(app_instance=app_inst)
+                        self.add_widget(self.main_screen)
+                
+                map_screen = MapScreen(app_inst=self)
+                self.root.add_widget(map_screen)
+            
+            # map画面に遷移
+            self.root.current = "map"
+        else:
+            # rootがScreenManagerでない場合（念のため）
+            self.root.clear_widgets()
+            self.main_screen = MainScreen(app_instance=self)
+            self.root.add_widget(self.main_screen)
+    
+    def back_to_login(self):
+        """ログイン画面に戻る"""
+        self.root.clear_widgets()
+        self.screen_manager = ScreenManager(transition=NoTransition())
+        self.screen_manager.add_widget(LoginScreen(name="login", app_instance=self))
+        self.screen_manager.add_widget(AccountScreen(name="account"))
+        self.screen_manager.add_widget(PictureScreen(name="picture"))
+        self.root.add_widget(self.screen_manager)
+    
+    # def get_user_id(self):
+    #     """現在ログイン中のユーザーIDを取得"""
+    #     if self.current_user:
+    #         return self.current_user.get("user_id")
+    #     return None
+    
+    # def get_user_name(self):
+    #     """現在ログイン中のユーザー名を取得"""
+    #     if self.current_user:
+    #         return self.current_user.get("user_name")
+    #     return None
+    
+    # def is_logged_in(self):
+    #     """ログイン状態を確認"""
+    #     return self.current_user is not None
+    
+    # def logout(self):
+    #     """ログアウト"""
+    #     self.current_user = None
+    #     self.back_to_login()
 
 
 if __name__ == "__main__":
