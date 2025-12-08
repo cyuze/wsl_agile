@@ -58,7 +58,7 @@ class GSImapSource(MapSource):
         )
 
 # ===============================================================
-# 丸アイコン（Stencil） - タッチ透過
+# 丸アイコン（Stencil）
 # ===============================================================
 class CircleImageView(StencilView):
     def __init__(self, source, **kwargs):
