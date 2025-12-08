@@ -196,7 +196,7 @@ class MainScreen(FloatLayout):
     # 4つのボタン処理
     # ======================================
     def on_friend_button(self, instance):
-        print("💬 チャットボタンが押されました")
+        print("💬 友達が押されました")
         if self.app_instance:  # この行を追加
             self.app_instance.open_friend_request()  # この行を追加
 
@@ -351,6 +351,18 @@ class MyApp(App):
         self.root.clear_widgets()
         chat_layout = MainLayout(app_instance=self)
         self.root.add_widget(chat_layout)
+    
+    def open_chat(self, my_id, target_id):  # このメソッドを追加
+        """個別チャット画面を開く"""
+        from personal_chat_screen import ChatScreen
+        self.root.clear_widgets()
+        chat_screen = ChatScreen(my_id, target_id, app_instance=self)
+        self.root.add_widget(chat_screen)
+        
+    def back_to_list(self):  # このメソッドも追加（チャットからリストに戻る用）
+        """チャット一覧に戻る"""
+        self.open_chat_list()
+    
             
     def open_friend_request(self):
         from friend_request import FriendRequestScreen
