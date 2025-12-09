@@ -236,7 +236,10 @@ class AccountForm(BoxLayout):
             self.picture_bg_color.rgba = get_color_from_hex('#ABE782')
             # 画像選択画面に遷移
             if self.screen_manager:
+                picture_screen = self.screen_manager.get_screen("picture")
+                picture_screen.caller = "account"   # ← 呼び出し元を記録
                 self.screen_manager.current = "picture"
+
 
         picture.bind(on_press=on_picture_press, on_release=on_picture_release)
 
