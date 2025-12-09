@@ -72,30 +72,65 @@ class LayeredTextInput(FloatLayout):
         self.bg_rect.radius = [dp(12)]
 
 
-# ✅ レスポンシブ対応のタイトルラベル
-class OverlappingLabel(FloatLayout):
-    def __init__(self, **kwargs):
+# ✅ レスポンシブ対応のタイトルボタン
+class OverlappingButton(FloatLayout):
+    def __init__(self, parent_app=None, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
         self.update_size()
+        self.parent_app = parent_app
+
 
         with self.canvas.before:
-            Color(rgba=get_color_from_hex('#ABE782'))
+            self.bg_color = Color(rgba=get_color_from_hex('#ABE782'))
             self.bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(12)])
 
-        self.label = Label(
+        # ボタン本体
+        self.button = Button(
             text="フレンド承認",
             font_name="Japanese",
             font_size=sp(18),
-            color=(0, 0, 0, 1),
             size_hint=(None, None),
             size=self.size,
+            pos=self.pos,
+            background_normal='',
+            background_color=(0, 0, 0, 0),  # 背景透明
+            color=(0, 0, 0, 1),             # テキスト色
             halign='left',
             valign='middle',
             padding=(dp(15), 0)
         )
-        self.label.bind(size=self.label.setter('text_size'))
-        self.add_widget(self.label)
+        self.button.bind(size=self.button.setter('text_size'))
+
+        # 背景矩形をボタンに追従
+        def update_rect(instance, value):
+            self.bg_rect.pos = instance.pos
+            self.bg_rect.size = instance.size
+            self.bg_rect.radius = [dp(12)]
+
+        self.button.bind(pos=update_rect, size=update_rect)
+
+        # 押下時の色変化
+        def on_press(instance):
+            self.bg_color.rgba = get_color_from_hex('#9DCB6E')
+
+        def on_release(instance):
+            self.bg_color.rgba = get_color_from_hex('#ABE782')
+
+            root = App.get_running_app().root
+
+            from friend_request import FriendRequestApp
+
+            temp_app = FriendRequestApp()
+            screen = temp_app.build()  
+
+            root.clear_widgets()
+            root.add_widget(screen)
+
+
+        self.button.bind(on_press=on_press, on_release=on_release)
+
+        self.add_widget(self.button)
 
         self.bind(pos=self.update_bg, size=self.update_bg)
         Window.bind(size=self.on_window_resize)
@@ -111,14 +146,14 @@ class OverlappingLabel(FloatLayout):
 
     def on_window_resize(self, *args):
         self.update_size()
-        self.label.size = self.size
-        self.label.text_size = self.size
+        self.button.size = self.size
+        self.button.text_size = self.size
 
     def update_bg(self, *args):
         self.bg_rect.pos = self.pos
         self.bg_rect.size = self.size
         self.bg_rect.radius = [dp(12)]
-        self.label.pos = self.pos
+        self.button.pos = self.pos
 
 
 # ✅ レスポンシブ対応のユーザー情報行
@@ -235,9 +270,15 @@ class UserInfoRow(BoxLayout):
 
 # ✅ Kivy UIとロジック
 class FriendApp(BoxLayout):
-    def __init__(self, user_id=None, **kwargs):
+    def __init__(self, **kwargs):
+        # カスタムパラメータを先に取り出す
+        self.user_id = kwargs.pop('user_id', None)
+        self.app_instance = kwargs.pop('app_instance', None)  # 追加
+        
+        # super().__init__() を呼ぶ
         super().__init__(orientation='vertical', spacing=0, **kwargs)
-        self.user_id = user_id  # ログインユーザーのID
+        
+        Window.clearcolor = get_color_from_hex("#ECF4E8")
         self.search_scheduled = None
         Window.bind(size=self.update_layout)
         self.update_layout()
@@ -281,7 +322,7 @@ class FriendApp(BoxLayout):
         self.user_info.pos_hint = {'center_x': 0.5, 'y': -0.5}
         overlap_container.add_widget(self.user_info)
 
-        self.title_label = OverlappingLabel()
+        self.title_label = OverlappingButton(parent_app=self)
         self.title_label.pos_hint = {'x': 0, 'top': 1}
         overlap_container.add_widget(self.title_label)
 
@@ -360,9 +401,6 @@ class FriendApp(BoxLayout):
 
 class FriendAppMain(App):
     def build(self):
-
-        
-        Window.clearcolor = get_color_from_hex("#ECF4E8")
 
         root = AnchorLayout(anchor_x='center', anchor_y='top')
         app_layout = FriendApp(size_hint=(1, 1))

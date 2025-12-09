@@ -201,7 +201,7 @@ class MainScreen(FloatLayout):
     def on_friend_button(self, instance):
         print("💬 友達が押されました")
         if self.app_instance:  # この行を追加
-            self.app_instance.open_friend_request()  # この行を追加
+            self.app_instance.open_friend_addition()  # この行を追加
 
     def on_chat_button(self, instance):
         print("💬 チャットボタンが押されました")
@@ -367,10 +367,10 @@ class MyApp(App):
         self.open_chat_list()
     
             
-    def open_friend_request(self):
-        from friend_request import FriendRequestScreen
+    def open_friend_addition(self):
+        from addition import FriendApp
         self.root.clear_widgets()
-        screen = FriendRequestScreen()
+        screen = FriendApp()
         self.root.add_widget(screen)
             
     def back_to_map(self):
