@@ -361,8 +361,6 @@ class WaitingApp(App):
                 self.root.add_widget(new_screen)
             
             self.root.current = screen_name
-            
-
 
 if __name__ == "__main__":
     WaitingApp().run()
