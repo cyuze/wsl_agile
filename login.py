@@ -341,6 +341,26 @@ class WaitingApp(App):
                 self.root.add_widget(s)
 
             self.root.current = "settings"
+            
+    
+    def open_friend_profile(self, friend_id):
+        """フレンドプロフィール画面を開く"""
+        from friend_profile import FriendProfileScreen
+        
+        if isinstance(self.root, ScreenManager):
+            screen_name = f"friend_profile_{friend_id}"
+            
+            if not self.root.has_screen(screen_name):
+                class FriendProfileWrap(Screen):
+                    def __init__(self, friend_id, app_inst, **kwargs):
+                        super().__init__(name=screen_name, **kwargs)
+                        profile = FriendProfileScreen(friend_id=friend_id, app_instance=app_inst)
+                        self.add_widget(profile)
+                
+                new_screen = FriendProfileWrap(friend_id, app_inst=self)
+                self.root.add_widget(new_screen)
+            
+            self.root.current = screen_name
 
 
 if __name__ == "__main__":
