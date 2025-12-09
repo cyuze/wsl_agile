@@ -12,70 +12,65 @@ from kivy.uix.stencilview import StencilView
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop, RoundedRectangle
 from kivy.metrics import dp, sp
-from kivy.uix.screenmanager import Screen, ScreenManager
+from kivy.uix.screenmanager import Screen
 
-import os
 import requests
 
-SUPABASE_URL = 'https://impklpvfmyvydnoayhfj.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4'
+
+# Supabase =============================================================================
+SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
 
 headers = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
 }
 
-def get_user_by_name(user_name: str):
+
+def get_user_by_id(user_id: str):
+    """user_id から Supabase users テーブルを検索"""
     url = f"{SUPABASE_URL}/rest/v1/users"
-    params = {"user_name": f"eq.{user_name}", "select": "*"}
-    res = requests.get(url, headers=headers, params=params)
-    if res.status_code != 200:
-        raise Exception(f"Supabase Error: {res.status_code} → {res.text}")
-    data = res.json()
-    if not data:
+    params = {"user_id": f"eq.{user_id}", "select": "*"}
+    r = requests.get(url, headers=headers, params=params)
+
+    if r.status_code != 200:
+        print("Supabase Error:", r.text)
         return None
-    return data[0]
 
-row = get_user_by_name("reirei")
-if row is None:
-    raise Exception("ユーザーが見つかりませんでした。")
+    data = r.json()
+    return data[0] if data else None
 
-user_name = row["user_name"]
-img_url = row["icon_url"]
 
+# UI scaling ============================================================================
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
-Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
+Window.clearcolor = (236/255, 244/255, 232/255, 1)
 
-# === スケーリング係数 ===
-scale = Window.dpi / 120.0   # 160dpiを基準に拡大
+scale = Window.dpi / 120.0
 
-def Sdp(value):  # Scaled dp
-    return dp(value * scale)
+def Sdp(v):
+    return dp(v * scale)
 
-def Ssp(value):  # Scaled sp
-    return sp(value * scale)
+def Ssp(v):
+    return sp(v * scale)
 
-# 画像カード
+
+# UI Parts ==============================================================================
 class ImageCard(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.padding = Sdp(10)
         self.size_hint = (None, None)
-        self.size = (Sdp(160), Sdp(160))  # ←大きめに
+        self.size = (Sdp(160), Sdp(160))
         with self.canvas.before:
-            self.rect = RoundedRectangle(
-                background_color = Color(0.67, 0.91, 0.51, 1),
-                pos=self.pos,
-                size=self.size,
-                radius=[Sdp(25)]
-            )
+            Color(0.67, 0.91, 0.51, 1)
+            self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[Sdp(25)])
         self.bind(pos=self.update_rect, size=self.update_rect)
 
     def update_rect(self, *args):
         self.rect.pos = self.pos
         self.rect.size = self.size
 
-# 丸アイコン
+
 class CircleImageView(StencilView):
     def __init__(self, source, **kwargs):
         super().__init__(**kwargs)
@@ -86,9 +81,9 @@ class CircleImageView(StencilView):
             StencilUse()
         self.img = AsyncImage(
             source=self.source,
+            size_hint=(None, None),
             allow_stretch=True,
             keep_ratio=False,
-            size_hint=(None, None),
             size=self.size
         )
         self.add_widget(self.img)
@@ -103,15 +98,15 @@ class CircleImageView(StencilView):
         self.img.pos = self.pos
         self.img.size = self.size
 
-# 角丸ボタン
+
 class RoundedButton(Button):
     def __init__(self, **kwargs):
+        bg = kwargs.pop("background_color", (0.671, 0.906, 0.510, 1))
         super().__init__(**kwargs)
-        bg_color = kwargs.pop("background_color", (0.671, 0.906, 0.510, 1))
         self.background_normal = ""
         self.background_color = (0, 0, 0, 0)
         with self.canvas.before:
-            self.bg_color_instruction = Color(rgba=bg_color)
+            Color(*bg)
             self.rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[Sdp(25)])
         self.bind(pos=self.update_rect, size=self.update_rect)
 
@@ -119,12 +114,26 @@ class RoundedButton(Button):
         self.rect.pos = self.pos
         self.rect.size = self.size
 
-# プロフィール画面
+
+# Profile Screen ==========================================================================
 class FriendProfileScreen(Screen):
-    def __init__(self, **kwargs):
+    def __init__(self, friend_id=None, app_instance=None, **kwargs):
         super().__init__(**kwargs)
 
-        # ルートレイアウト
+        # ← Kivy に渡さず、ここで普通に保持する
+        self.friend_id = friend_id
+        self.app_instance = app_instance
+
+        # Supabase からユーザー情報取得
+        user = get_user_by_id(friend_id)
+        if user:
+            user_name = user["user_name"]
+            img_url = user["icon_url"]
+        else:
+            user_name = "不明なユーザー"
+            img_url = "img/default_user.png"
+
+        # 以下 UI =====================================================================
         root_layout = BoxLayout(
             orientation="vertical",
             spacing=Sdp(30),
@@ -135,8 +144,7 @@ class FriendProfileScreen(Screen):
         anchor = AnchorLayout(anchor_x="center", anchor_y="center")
         anchor.add_widget(root_layout)
 
-
-        # プロフィール部分
+        # アイコン + 名前
         profile_layout = BoxLayout(
             orientation="horizontal",
             spacing=Sdp(20),
@@ -145,17 +153,17 @@ class FriendProfileScreen(Screen):
         )
         profile_layout.add_widget(Widget(size_hint_x=0.1))
 
-        image_card = ImageCard()
-        profile_icon = CircleImageView(
+        img_card = ImageCard()
+        circle = CircleImageView(
             source=img_url,
             size_hint=(None, None),
             size=(Sdp(140), Sdp(140))
         )
-        image_card.add_widget(profile_icon)
-        profile_layout.add_widget(image_card)
+        img_card.add_widget(circle)
+        profile_layout.add_widget(img_card)
 
-        profile_name_layout = BoxLayout(orientation="vertical")
-        profile_name = Label(
+        name_layout = BoxLayout(orientation="vertical")
+        name_label = Label(
             text=user_name,
             font_name="Japanese",
             font_size=Ssp(28),
@@ -163,8 +171,8 @@ class FriendProfileScreen(Screen):
             size_hint=(1, None),
             height=Sdp(140)
         )
-        profile_name_layout.add_widget(profile_name)
-        profile_layout.add_widget(profile_name_layout)
+        name_layout.add_widget(name_label)
+        profile_layout.add_widget(name_layout)
 
         root_layout.add_widget(profile_layout)
 
@@ -185,7 +193,7 @@ class FriendProfileScreen(Screen):
             background_color=(0.67, 0.90, 0.51, 1),
             on_press=self.on_chat_press
         )
-        meeting_button = RoundedButton(
+        meet_button = RoundedButton(
             text="待ち合わせする",
             color=(0, 0, 0, 1),
             font_size=Ssp(22),
@@ -196,7 +204,7 @@ class FriendProfileScreen(Screen):
             on_press=self.on_meeting_press
         )
         row1.add_widget(chat_button)
-        row1.add_widget(meeting_button)
+        row1.add_widget(meet_button)
         root_layout.add_widget(row1)
 
         # ボタン行2（削除）
@@ -206,7 +214,7 @@ class FriendProfileScreen(Screen):
             size_hint_y=None,
             height=Sdp(90)
         )
-        delete_button = RoundedButton(
+        del_button = RoundedButton(
             text="削除",
             color=(0, 0, 0, 1),
             font_size=Ssp(22),
@@ -216,25 +224,23 @@ class FriendProfileScreen(Screen):
             background_color=(0.60, 0.80, 0.90, 1),
             on_press=self.on_delete_press
         )
-        row2.add_widget(delete_button)
+        row2.add_widget(del_button)
         root_layout.add_widget(row2)
 
-        # 最後に Screen に追加
+        # add root
         self.add_widget(anchor)
 
-
-    # イベントハンドラ
+    # ボタンイベント ======================================================================
     def on_chat_press(self, instance):
-        print("チャットボタンが押されました。")
+        print("チャットを開始（相手ID →", self.friend_id, ")")
+        if self.app_instance:
+            self.app_instance.open_chat("MY_ID", self.friend_id)
 
     def on_meeting_press(self, instance):
-        print("待ち合わせボタンがクリックされました。")
+        print("待ち合わせ開始：", self.friend_id)
 
     def on_delete_press(self, instance):
-        print("お友達を手放しました。")
-        
-    def go_back(self, *args):
-        self.manager.current = "settings"
+        print("友達削除：", self.friend_id)
 
 
 class FriendProfileApp(App):

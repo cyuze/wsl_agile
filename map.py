@@ -13,6 +13,11 @@ import requests
 import json
 from chat_screen import MainLayout  # この行を追加
 from settings import SettingsScreen  # この行を追加(settings)
+from kivy_garden.mapview import MapMarker
+from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.image import AsyncImage
+from kivy.graphics import Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop
 
 
 # Android 権限
@@ -60,7 +65,7 @@ class GSImapSource(MapSource):
 # ===============================================================
 # 丸アイコン（Stencil）
 # ===============================================================
-class CircleImageView(StencilView):
+class CircleImageView(ButtonBehavior, StencilView):
     def __init__(self, source, **kwargs):
         super().__init__(**kwargs)
         self.source = source
@@ -81,41 +86,75 @@ class CircleImageView(StencilView):
         self.img.pos = self.pos
         self.img.size = self.size
 
-    # タッチ透過
-    def on_touch_down(self, touch): return False
-    def on_touch_move(self, touch): return False
-    def on_touch_up(self, touch): return False
 
 # ===============================================================
 # 友だちマーカー（丸アイコン付き）
 # ===============================================================
-class FriendMarker(MapLayer):
-    def __init__(self, mapview, lat, lon, icon_url, **kwargs):
-        super().__init__(**kwargs)
-        self.mapview = mapview
-        self.lat = lat
-        self.lon = lon
-        self.size = (70, 70)
-        self.icon = CircleImageView(source=icon_url, size=self.size, size_hint=(None, None))
-        self.add_widget(self.icon)
-        mapview.bind(on_map_relocated=self.update_position, zoom=self.update_position)
-        self.update_position()
 
-    # タッチ透過
-    def on_touch_down(self, touch): return False
-    def on_touch_move(self, touch): return False
-    def on_touch_up(self, touch): return False
+class FriendMarker(MapMarker):
+    def __init__(self, lat, lon, icon_url, friend_id, app_instance, **kwargs):
+        super().__init__(lat=lat, lon=lon, **kwargs)
 
-    def update_position(self, *args):
-        try:
-            x, y = self.mapview.get_window_xy_from(lat=self.lat, lon=self.lon, zoom=self.mapview.zoom)
-            self.icon.pos = (x - self.size[0]/2, y - self.size[1]/2)
-        except Exception:
-            pass
+        self.friend_id = friend_id
+        self.app_instance = app_instance
 
+        # コンテナ（ボタン + 丸画像）
+        self.container = FriendIconButton(
+            icon_url=icon_url,
+            friend_id=friend_id,
+            app_instance=app_instance
+        )
+        self.add_widget(self.container)
+
+        self.bind(pos=self.update_container)
+        
+
+    def update_container(self, *args):
+        self.container.pos = self.pos
 # ===============================================================
 # 背景付き画像ボタン
 # ===============================================================
+class FriendIconButton(ButtonBehavior, FloatLayout):
+    def __init__(self, icon_url, friend_id, app_instance, **kwargs):
+        super().__init__(**kwargs)
+
+        self.size = (70, 70)
+        self.friend_id = friend_id
+        self.app_instance = app_instance
+
+        # 丸マスク
+        with self.canvas.before:
+            StencilPush()
+            self.mask = Ellipse(size=self.size, pos=self.pos)
+            StencilUse()
+
+        # アイコン画像
+        self.image = AsyncImage(
+            source=icon_url,
+            allow_stretch=True,
+            keep_ratio=False,
+            size=self.size,
+        )
+        self.add_widget(self.image)
+
+        with self.canvas.after:
+            StencilUnUse()
+            StencilPop()
+
+        self.bind(pos=self.update_mask, size=self.update_mask)
+
+    def update_mask(self, *args):
+        self.mask.pos = self.pos
+        self.mask.size = self.size
+        self.image.pos = self.pos
+        self.image.size = self.size
+
+    def on_press(self):
+        print("🧑 フレンドアイコン押された:", self.friend_id)
+        if self.app_instance:
+            self.app_instance.open_friend_profile(self.friend_id)
+
+
 class ImageButton(ButtonBehavior, FloatLayout):
     def __init__(self, image_source, **kwargs):
         super().__init__(**kwargs)
@@ -201,7 +240,7 @@ class MainScreen(FloatLayout):
     def on_friend_button(self, instance):
         print("💬 友達が押されました")
         if self.app_instance:  # この行を追加
-            self.app_instance.open_friend_request()  # この行を追加
+            self.app_instance.open_friend_addition()  # この行を追加
 
     def on_chat_button(self, instance):
         print("💬 チャットボタンが押されました")
@@ -331,12 +370,17 @@ class MainScreen(FloatLayout):
             marker = self.friend_markers[friend_id]
             marker.lat = lat
             marker.lon = lon
-            marker.update_position()
         else:
             icon_url = self.fetch_friend_icon(friend_id) or "img/default_user.png"
-            marker = FriendMarker(self.mapview, lat, lon, icon_url)
-            self.mapview.add_layer(marker)
+
+            marker = FriendMarker(
+                lat, lon, icon_url,
+                friend_id, self.app_instance
+            )
+
+            self.mapview.add_marker(marker)
             self.friend_markers[friend_id] = marker
+
 
 # ===============================================================
 # アプリ本体
@@ -367,10 +411,10 @@ class MyApp(App):
         self.open_chat_list()
     
             
-    def open_friend_request(self):
-        from friend_request import FriendRequestScreen
+    def open_friend_addition(self):
+        from addition import FriendApp
         self.root.clear_widgets()
-        screen = FriendRequestScreen()
+        screen = FriendApp()
         self.root.add_widget(screen)
             
     def back_to_map(self):
@@ -386,6 +430,13 @@ class MyApp(App):
         self.root.clear_widgets()
         settings_screen = SettingsScreen(app_instance=self)
         self.root.add_widget(settings_screen)
+        
+    def open_friend_profile(self, friend_id):
+        """フレンドプロフィール画面を開く"""
+        from friend_profile import FriendProfileScreen  # friend_profile.pyからインポート
+        self.root.clear_widgets()
+        profile_screen = FriendProfileScreen(friend_id=friend_id, app_instance=self)
+        self.root.add_widget(profile_screen)
     
 
 if __name__ == '__main__':
