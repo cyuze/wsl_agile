@@ -386,6 +386,22 @@ class WaitingApp(App):
 
             # 画面を切り替える
             self.root.current = screen_name
+            
+    def open_picture(self, caller="account"):
+        """画像選択画面を開く"""
+        if isinstance(self.root, ScreenManager):
+            # まだ picture 画面が登録されていなければ追加
+            if not self.root.has_screen("picture"):
+                pic_screen = PictureScreen(name="picture")
+                self.root.add_widget(pic_screen)
+
+            # 呼び出し元を記録
+            pic_screen = self.root.get_screen("picture")
+            pic_screen.caller = caller
+
+            # 画面遷移
+            self.root.current = "picture"
+
 
 
 

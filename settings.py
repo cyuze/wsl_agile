@@ -104,7 +104,7 @@ class SettingsScreen(Screen):
         self.current_user = {"user_name": "yuze"}  # ← 本来はログイン時にセット
         
 
-        self.screen_manager = app_instance
+        self.app_instance = app_instance
         # 全体を縦に並べるレイアウト
         main_layout = BoxLayout(orientation="vertical")
 
@@ -279,12 +279,9 @@ class SettingsScreen(Screen):
     # イベントハンドラ
     def on_imgEdit_press(self, instance):
         print("画像編集ボタンが押されました。編集画面に遷移します。")
-        print(self.screen_manager)
-        if self.manager:
-            picture_screen = self.manager.get_screen("picture")
-            picture_screen.caller = "settings"  # ← 呼び出し元を記録
-            # self.manager.current = "picture" などにすると画面遷移可能
-            self.manager.current = "picture"
+        if self.app_instance:
+            self.app_instance.open_picture(caller="settings")
+
 
     def on_nameEdit_press(self, instance):
         print("名前編集ボタンが押されました。編集画面に遷移します。")
