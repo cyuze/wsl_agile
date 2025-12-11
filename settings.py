@@ -103,7 +103,8 @@ class SettingsScreen(Screen):
         super().__init__(**kwargs)
         self.current_user = {"user_name": "yuze"}  # ← 本来はログイン時にセット
         
-
+        Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
+        
         self.app_instance = app_instance
         # 全体を縦に並べるレイアウト
         main_layout = BoxLayout(orientation="vertical")
