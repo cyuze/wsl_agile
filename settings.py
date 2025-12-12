@@ -104,8 +104,10 @@ class SettingsScreen(Screen):
         self.current_user = {"user_name": "yuze"}  # ← 本来はログイン時にセット
         
         Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
-        
+
         self.app_instance = app_instance
+        Window.bind(on_keyboard=self.on_back_button)
+
         # 全体を縦に並べるレイアウト
         main_layout = BoxLayout(orientation="vertical")
 
@@ -349,17 +351,29 @@ class SettingsScreen(Screen):
         except Exception as e:
             print("更新失敗:", e)
             return False
+        
+    def on_back_button(self, window, key, *args):
+        if key == 27 and self.manager.current == "settings":
+            print("戻るボタン: map に戻ります")
+            if self.app_instance:
+                self.app_instance.back_to_map()
+                return True
+        return False
+
 
 
 class SettingsApp(App):
     def build(self):
-        sm = ScreenManager(transition=NoTransition())
-        sm.add_widget(SettingsScreen(name="settings"))
-        sm.add_widget(PictureScreen(name="picture")) 
-        sm.current = "settings"  # 起動時は設定画面
-        return sm
+        self.sm = ScreenManager(transition=NoTransition())
+        self.sm.add_widget(SettingsScreen(name="settings"))
+        self.sm.add_widget(PictureScreen(name="picture"))
+        # ここで friend_request 画面も追加しておくと戻る遷移が動作する
+        # self.sm.add_widget(FriendRequestScreen(name="friend_request"))
 
-    
+        self.sm.current = "settings"  # 起動時は設定画面
+
+        
+
 
 if __name__ == "__main__":
     SettingsApp().run()
