@@ -259,23 +259,23 @@ class PictureScreen(Screen):
 
         self.image_select = ImageSelectScreen(screen_manager=None)
         self.add_widget(self.image_select)
-        Window.bind(on_keyboard=self.on_back_button)
         
+        Window.bind(on_keyboard=self.on_back_button)
     
     def on_enter(self):
         # 画面に入った時にscreen_managerを設定
         self.image_select.screen_manager = self.manager
-        
-
     def on_back_button(self, window, key, *args):
         """Androidの戻るボタン処理"""
         # key=27 が ESC / Android 戻るボタン
-        if key == 27 and self.caller == "account":
-            # account → picture → 戻る → account
-            self.manager.current = "account"
-            return True
-        elif key == 27 and self.caller == "settings":
-            # settings → picture → 戻る → settings
-            self.manager.current = "settings"
-            return True
+        if key == 27:
+            if self.manager and self.manager.current == "picture":
+                # callerに応じて戻る先を決定
+                if hasattr(self, 'caller') and self.caller == "account":
+                    self.manager.current = "account"
+                elif hasattr(self, 'caller') and self.caller == "settings":
+                    self.manager.current = "settings"
+                else:
+                    self.manager.current = "login"
+                return True  # イベントを消費（アプリ終了しない）
         return False

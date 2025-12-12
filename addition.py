@@ -14,6 +14,7 @@ from kivy.uix.widget import Widget
 from kivy.clock import Clock
 from kivy.metrics import dp, sp
 import requests
+from kivy.uix.screenmanager import ScreenManager
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 
@@ -73,13 +74,13 @@ class LayeredTextInput(FloatLayout):
 
 
 # ✅ レスポンシブ対応のタイトルボタン
+# ✅ レスポンシブ対応のタイトルボタン
 class OverlappingButton(FloatLayout):
     def __init__(self, parent_app=None, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
         self.update_size()
         self.parent_app = parent_app
-
 
         with self.canvas.before:
             self.bg_color = Color(rgba=get_color_from_hex('#ABE782'))
@@ -94,15 +95,14 @@ class OverlappingButton(FloatLayout):
             size=self.size,
             pos=self.pos,
             background_normal='',
-            background_color=(0, 0, 0, 0),  # 背景透明
-            color=(0, 0, 0, 1),             # テキスト色
+            background_color=(0, 0, 0, 0),
+            color=(0, 0, 0, 1),
             halign='left',
             valign='middle',
             padding=(dp(15), 0)
         )
         self.button.bind(size=self.button.setter('text_size'))
 
-        # 背景矩形をボタンに追従
         def update_rect(instance, value):
             self.bg_rect.pos = instance.pos
             self.bg_rect.size = instance.size
@@ -110,23 +110,43 @@ class OverlappingButton(FloatLayout):
 
         self.button.bind(pos=update_rect, size=update_rect)
 
-        # 押下時の色変化
         def on_press(instance):
             self.bg_color.rgba = get_color_from_hex('#9DCB6E')
 
         def on_release(instance):
             self.bg_color.rgba = get_color_from_hex('#ABE782')
-
-            root = App.get_running_app().root
-
-            from friend_request import FriendRequestApp
-
-            temp_app = FriendRequestApp()
-            screen = temp_app.build()  
-
-            root.clear_widgets()
-            root.add_widget(screen)
-
+            
+            print("Button clicked!")  # デバッグ
+            
+            if self.parent_app:
+                print(f"parent_app exists: {self.parent_app}")
+                print(f"Has app_instance: {hasattr(self.parent_app, 'app_instance')}")
+                
+                if hasattr(self.parent_app, 'app_instance') and self.parent_app.app_instance:
+                    app_inst = self.parent_app.app_instance
+                    print(f"app_instance: {app_inst}")
+                    print(f"Has root: {hasattr(app_inst, 'root')}")
+                    
+                    if hasattr(app_inst, 'root'):
+                        sm = app_inst.root
+                        print(f"Root type: {type(sm)}")
+                        print(f"Is ScreenManager: {isinstance(sm, ScreenManager)}")
+                        
+                        if isinstance(sm, ScreenManager):
+                            print(f"Screens: {[s.name for s in sm.screens]}")
+                            
+                            if not sm.has_screen("friend_request"):
+                                from friend_request import FriendRequestScreen
+                                screen = FriendRequestScreen(name="friend_request")
+                                sm.add_widget(screen)
+                                print("Added friend_request screen")
+                            
+                            sm.current = "friend_request"
+                            print(f"Switched to: {sm.current}")
+                else:
+                    print("app_instance not available!")
+            else:
+                print("No parent_app!")
 
         self.button.bind(on_press=on_press, on_release=on_release)
 
@@ -278,10 +298,23 @@ class FriendApp(BoxLayout):
         # super().__init__() を呼ぶ
         super().__init__(orientation='vertical', spacing=0, **kwargs)
         
+        
         Window.clearcolor = get_color_from_hex("#ECF4E8")
         self.search_scheduled = None
         Window.bind(size=self.update_layout)
         self.update_layout()
+        
+        Window.bind(on_keyboard=self.on_back_button)
+        
+    def on_back_button(self, window, key, *args):
+        """Androidの戻るボタン処理"""
+        # key=27 が ESC / Android 戻るボタン
+        if key == 27:
+            if self.app_instance and hasattr(self.app_instance, 'screen_manager'):
+                if self.app_instance.screen_manager.current == "friend_add":
+                    self.app_instance.back_to_map()
+                    return True  # イベントを消費（アプリ終了しない）
+        return False
 
     def get_content_width(self):
         width = Window.width
@@ -405,6 +438,7 @@ class FriendAppMain(App):
         root = AnchorLayout(anchor_x='center', anchor_y='top')
         app_layout = FriendApp(size_hint=(1, 1))
         root.add_widget(app_layout)
+        
         return root
 
 

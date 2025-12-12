@@ -148,7 +148,7 @@ class AccountForm(BoxLayout):
             height=dp(45),
             multiline=False,
             background_color=get_color_from_hex('#ECF4E8'),
-            padding=[dp(10), dp(12), dp(10), dp(12)]
+            padding=[dp(10), dp(10), dp(10), dp(10)]
         )
         self.add_widget(self.user)
         
@@ -162,7 +162,7 @@ class AccountForm(BoxLayout):
             height=dp(45),
             multiline=False,
             background_color=get_color_from_hex('#ECF4E8'),
-            padding=[dp(10), dp(12), dp(10), dp(12)]
+            padding=[dp(10), dp(10), dp(10), dp(10)]
         )
         self.add_widget(self.password)
 
@@ -175,7 +175,7 @@ class AccountForm(BoxLayout):
             height=dp(45),
             multiline=False,
             background_color=get_color_from_hex('#ECF4E8'),
-            padding=[dp(10), dp(12), dp(10), dp(12)]
+            padding=[dp(10), dp(10), dp(10), dp(10)]
         )
         self.add_widget(self.email)
 
@@ -394,6 +394,7 @@ class AccountForm(BoxLayout):
         self.current_image_path = image_path
         if self.img is not None:
             self.img.update_source(image_path)
+            
 
 
 class AccountScreen(Screen):
@@ -410,7 +411,19 @@ class AccountScreen(Screen):
         anchor.add_widget(self.form)
         
         self.add_widget(anchor)
+        
+        # Androidの戻るボタンをキャッチ
+        Window.bind(on_keyboard=self.on_back_button)
     
     def on_enter(self):
         # 画面に入った時にscreen_managerを設定
         self.form.screen_manager = self.manager
+    
+    def on_back_button(self, window, key, *args):
+        """Androidの戻るボタン処理"""
+        # key=27 が ESC / Android 戻るボタン
+        if key == 27:
+            if self.manager and self.manager.current == "account":
+                self.manager.current = "login"
+                return True  # イベントを消費（アプリ終了しない）
+        return False
