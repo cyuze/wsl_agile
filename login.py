@@ -15,6 +15,7 @@ from account import AccountScreen
 from picture import PictureScreen
 from map import MainScreen
 from supabase import create_client, Client
+from settings import SettingsScreen
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 
@@ -384,22 +385,13 @@ class WaitingApp(App):
 
 
     def open_settings(self):
-        """設定画面を開く"""
-        from settings import SettingsScreen
+            """設定画面を開く"""
+            if isinstance(self.root, ScreenManager):
+                if not self.root.has_screen("settings"):
+                    s = SettingsScreen(name="settings", app_instance=self)
+                    self.root.add_widget(s)
+                self.root.current = "settings"
 
-        if isinstance(self.root, ScreenManager):
-            if not self.root.has_screen("settings"):
-                
-                class SettingsWrap(Screen):
-                    def __init__(self, app_inst, **kwargs):
-                        super().__init__(name="settings", **kwargs)
-                        layout = SettingsScreen(app_instance=app_inst)
-                        self.add_widget(layout)
-
-                s = SettingsWrap(app_inst=self)
-                self.root.add_widget(s)
-
-            self.root.current = "settings"
             
     
     def open_friend_profile(self, friend_id):
@@ -445,6 +437,22 @@ class WaitingApp(App):
 
             # 画面を切り替える
             self.root.current = screen_name
+            
+    def open_picture(self, caller="settings"):
+        """画像選択画面を開く"""
+        if isinstance(self.root, ScreenManager):
+            # まだ picture 画面が登録されていなければ追加
+            if not self.root.has_screen("picture"):
+                pic_screen = PictureScreen(name="picture")
+                self.root.add_widget(pic_screen)
+
+            # 呼び出し元を記録
+            pic_screen = self.root.get_screen("picture")
+            pic_screen.caller = caller
+
+            # 画面遷移
+            self.root.current = "picture"
+
 
 
 
