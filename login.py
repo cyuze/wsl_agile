@@ -397,6 +397,7 @@ class WaitingApp(App):
     def open_friend_profile(self, friend_id):
         """フレンドプロフィール画面を開く"""
         from friend_profile import FriendProfileScreen
+        from kivy.core.window import Window
         
         if isinstance(self.root, ScreenManager):
             screen_name = f"friend_profile_{friend_id}"
@@ -405,8 +406,18 @@ class WaitingApp(App):
                 class FriendProfileWrap(Screen):
                     def __init__(self, friend_id, app_inst, **kwargs):
                         super().__init__(name=screen_name, **kwargs)
+                        self.app_inst = app_inst
                         profile = FriendProfileScreen(friend_id=friend_id, app_instance=app_inst)
                         self.add_widget(profile)
+                        # キーボードイベントをバインド
+                        Window.bind(on_keyboard=self.on_back_button)
+                    
+                    def on_back_button(self, window, key, *args):
+                        """戻るボタン処理"""
+                        if key == 27 and self.manager and self.manager.current == self.name:
+                            self.manager.current = "account"
+                            return True
+                        return False
                 
                 new_screen = FriendProfileWrap(friend_id, app_inst=self)
                 self.root.add_widget(new_screen)
