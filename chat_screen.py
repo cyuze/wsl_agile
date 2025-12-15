@@ -405,6 +405,14 @@ class MainLayout(BoxLayout):
             "Authorization": f"Bearer {SUPABASE_KEY}"
         }
 
+        # 最新の既読状態ファイルを都度再読み込みして、
+        # 他画面（ChatScreen等）で更新された既読タイムスタンプを反映する
+        try:
+            if os.path.exists(self.state_path):
+                with open(self.state_path, 'r', encoding='utf-8') as f:
+                    self.chat_state = json.load(f)
+        except Exception:
+            self.chat_state = {}
         try:
             res = requests.get(url, headers=headers, params=params)
             if res.status_code != 200:
