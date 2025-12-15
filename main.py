@@ -14,15 +14,16 @@ from kivy.uix.popup import Popup
 from account import AccountScreen
 from picture import PictureScreen
 from map import MainScreen
-from supabase import create_client, Client
 from settings import SettingsScreen
+import requests
+import json
+
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 
 # Supabase設定
 SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 class LoginForm(BoxLayout):
@@ -185,58 +186,64 @@ class LoginForm(BoxLayout):
         self.add_widget(Widget(size_hint_y=None, height=dp(10)))
     
     def handle_login(self):
-        """ログイン処理"""
+        """ログイン処理 (REST API版)"""
         email = self.email.text.strip()
         password = self.password.text.strip()
-        
-        # 入力チェック
+
         if not email or not password:
             self.show_popup("入力エラー")
             return
-        
+
         try:
-            # Supabaseのusersテーブルから認証情報を取得
-            response = supabase.table('users').select('*').eq('user_mail', email).eq('user_pw', password).execute()
-            
-            # レスポンスのデバッグ出力
-            print(f"Supabase response: {response}")
-            
-            if response.data and len(response.data) > 0:
-                # ログイン成功
-                user = response.data[0]
-                
-                # JSONファイルに認証情報を保存
-                self.save_login_info(email, password)
-                
-                if self.app_instance:
-                    self.app_instance.current_user = user
-                    self.app_instance.open_map_screen()
+            # Supabase REST API: usersテーブルを直接叩く
+            url = f"{SUPABASE_URL}/rest/v1/users"
+            headers = {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json",
+            }
+            params = {
+                "user_mail": f"eq.{email}",
+                "user_pw": f"eq.{password}"
+            }
+
+            response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code == 200:
+                data = response.json()
+                print(f"Supabase response: {data}")
+
+                if data and len(data) > 0:
+                    user = data[0]
+                    self.save_login_info(email, password)
+
+                    if self.app_instance:
+                        self.app_instance.current_user = user
+                        self.app_instance.open_map_screen()
+                else:
+                    self.show_popup("入力エラー")
             else:
-                # ログイン失敗
+                print(f"Error: {response.status_code}, {response.text}")
                 self.show_popup("入力エラー")
-                
+
         except Exception as e:
             print(f"Login error: {str(e)}")
             self.show_popup("入力エラー")
-    
+
+
     def save_login_info(self, email, password):
         """ログイン情報をJSONファイルに保存"""
-        import json
-        import os
-        
         login_data = {
             "user_mail": email,
             "user_pw": password
         }
-        
         try:
-            # users.jsonに保存
             with open('users.json', 'w', encoding='utf-8') as f:
                 json.dump([login_data], f, ensure_ascii=False, indent=2)
-            print(f"Login info saved to users.json")
+            print("Login info saved to users.json")
         except Exception as e:
             print(f"Error saving login info: {str(e)}")
-    
+
     def show_popup(self, message):
         width = Window.width
         popup_width = min(width * 0.8, dp(300))
