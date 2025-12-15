@@ -20,7 +20,7 @@ android.environ = KIVY_NO_SYSTEM_CONFIG=1,KIVY_NO_ARGS=1
 garden_requirements = mapview
 
 # (str) Title of your application
-title = My Application
+title = おもまち（仮）
 # (str) Package name
 package.name = myapp
 # (str) Package domain (needed for android/ios packaging)
@@ -55,9 +55,9 @@ requirements = python3,kivy,plyer,requests,kivy_garden.mapview,python-dotenv
 # Sets custom source for any requirements with recipes
 # requirements.source.kivy = ../../kivy
 # (str) Presplash of the application
-#presplash.filename = %(source.dir)s/data/presplash.png
+presplash.filename = %(source.dir)s/img/loading.jpeg
 # (str) Icon of the application
-#icon.filename = %(source.dir)s/data/icon.png
+icon.filename = %(source.dir)s/img/appicon.png
 # (list) Supported orientations
 # Valid options are: landscape, portrait, portrait-reverse, landscape-reverse, or all
 orientation = portrait
