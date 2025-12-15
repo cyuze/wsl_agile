@@ -111,20 +111,15 @@ class ChatListItem(ButtonBehavior, BoxLayout):
         )
 
         # -------- アバター表示(全部統一して丸表示) --------
-        # アイコンをさらに大きめにして上下中央に配置する
         avatar_widget = CircularImage(source=icon_url if icon_url else "img/default.png", size=(112, 112))
-        # 縦中央揃えのため、上下に余白用の Widget を置くコンテナ
         avatar_layout = BoxLayout(orientation='vertical', size_hint=(None, 1), width=avatar_widget.size[0])
         avatar_layout.add_widget(Widget())
         avatar_layout.add_widget(avatar_widget)
         avatar_layout.add_widget(Widget())
 
         # -------- テキスト --------
-        # 横方向に余裕を持たせるため size_hint_x=1 を指定
         text_layout = BoxLayout(orientation='vertical', spacing=5, size_hint_x=1)
 
-        # Label の折返しは `text_size=(width, None)` にして
-        # `texture_size` を監視して高さを自動設定するパターンを使う
         name_label = Label(
             text=name,
             size_hint_y=None,
@@ -134,7 +129,6 @@ class ChatListItem(ButtonBehavior, BoxLayout):
             halign='left',
             valign='middle'
         )
-        # 初期 text_size とバインド
         name_label.text_size = (0, None)
         name_label.bind(width=lambda inst, w: inst.setter('text_size')(inst, (w, None)))
         name_label.bind(texture_size=lambda inst, ts: setattr(inst, 'height', ts[1]))
@@ -157,14 +151,12 @@ class ChatListItem(ButtonBehavior, BoxLayout):
 
         # -------- 未読表示: 件数ラベル + 大きめの mail アイコン --------
         if unread_count and unread_count > 0:
-            # mail icon を大きめに表示
             mail_path = os.path.join(os.path.dirname(__file__), 'img', 'mail.png')
             if os.path.exists(mail_path):
                 mail_icon = Image(source=mail_path, size_hint=(None, None), size=(72, 72), allow_stretch=True, keep_ratio=True)
             else:
                 mail_icon = Image(source='img/send.png', size_hint=(None, None), size=(72, 72), allow_stretch=True, keep_ratio=True)
 
-            # 件数ラベル（左寄せ） — 折返しさせずテキスト幅に合わせる
             count_label = Label(
                 text=f'新着{unread_count}件',
                 font_size='14sp',
@@ -174,19 +166,15 @@ class ChatListItem(ButtonBehavior, BoxLayout):
                 halign='left',
                 valign='middle'
             )
-            # テクスチャ更新してラベル幅をテキスト幅に合わせる（折返しを防止）
             try:
                 count_label.texture_update()
                 tw, th = count_label.texture_size
                 count_label.size = (tw + 8, th)
             except Exception:
-                # fallback 固定サイズ
                 count_label.size = (120, 24)
 
-            # 横に並べるコンテナ（ラベル左、アイコン右）。spacing を増やして余白確保
             right_h = BoxLayout(orientation='horizontal', size_hint=(None, 1), spacing=12)
             right_h.width = (count_label.width + 12 + 72)
-            # ラベルを縦中央に
             lbl_container = BoxLayout(orientation='vertical', size_hint=(None, 1), width=count_label.width)
             lbl_container.add_widget(Widget())
             lbl_container.add_widget(count_label)
@@ -207,38 +195,29 @@ class ChatListItem(ButtonBehavior, BoxLayout):
         self.add_widget(text_layout)
         self.add_widget(right_widget)
 
-        # ラベルのテクスチャサイズに応じてアイテム全体の高さを再計算する
         def _update_item_height(*args):
-            # ラベルの現在の高さを使う（texture_size から更新済み）
             name_h = getattr(name_label, 'height', 0) or 0
             msg_h = getattr(message_label, 'height', 0) or 0
 
             labels_total = name_h + msg_h
             total_padding = (self.padding[1] if len(self.padding) > 1 else 0) + (self.padding[3] if len(self.padding) > 3 else 0)
-            # spacing between labels
             spacing = text_layout.spacing if hasattr(text_layout, 'spacing') else 0
             required_height = labels_total + total_padding + spacing
 
-            # アイコン高さと比較して最大値を採用
-            # avatar_widget の実際の高さを参照
             avatar_h = avatar_widget.size[1] if 'avatar_widget' in locals() and hasattr(avatar_widget, 'size') else (avatar_layout.size[1] if hasattr(avatar_layout, 'size') else 0)
             new_height = max(avatar_h + total_padding, required_height, 60)
 
-            # 少し余裕を持たせる
             new_height = int(new_height + 8)
             if self.height != new_height:
                 self.height = new_height
 
-        # テクスチャ更新時やサイズ変更時に再計算
         name_label.bind(texture_size=lambda *_: _update_item_height())
         message_label.bind(texture_size=lambda *_: _update_item_height())
         avatar_layout.bind(size=lambda *_: _update_item_height())
-        # 初回計算
         _update_item_height()
 
     def on_press(self):
         if self.app_instance and self.other_user_id:
-            # 開いた時点で既読として保存
             try:
                 app = self.app_instance
                 state_path = os.path.join(os.path.dirname(__file__), 'chat_state.json')
@@ -267,6 +246,20 @@ class ChatListItem(ButtonBehavior, BoxLayout):
 class MainLayout(BoxLayout):
     def __init__(self, app_instance=None, **kwargs):
         super().__init__(**kwargs)
+        
+        # 🔥 戻るボタンのキーボードイベントをバインド
+        self._keyboard_bind = Window.bind(on_keyboard=self.on_back_button)
+
+        # 親が外れたときにキーバインドを解除する
+        def _on_parent_change(instance, parent):
+            if parent is None:
+                try:
+                    Window.unbind(on_keyboard=self.on_back_button)
+                except Exception:
+                    pass
+
+        self.bind(parent=_on_parent_change)
+        
         with self.canvas.before:
             Color(0.925, 0.957, 0.91, 1)  # ECF4E8
             self.bg_rect = RoundedRectangle(pos=self.pos, size=self.size)
@@ -279,7 +272,6 @@ class MainLayout(BoxLayout):
         self.orientation = 'vertical'
         self.app_instance = app_instance
         self.all_chat_items = []
-        # チャットの既読情報を保存するファイルパス
         self.state_path = os.path.join(os.path.dirname(__file__), 'chat_state.json')
         self.chat_state = {}
         try:
@@ -329,30 +321,25 @@ class MainLayout(BoxLayout):
             font_size='16sp',
             font_name='NotoSansJP',
             input_type='text',     
-
         )
-        
 
-        # 高さが決まった後に上下中央になるように調整
         def adjust_padding(instance, value):
             instance.padding_y = (instance.height - instance.line_height) / 2
 
         self.search_input.bind(size=adjust_padding)
-
         self.search_input.bind(text=self.on_search_text)
 
         search_box.add_widget(search_icon)
         search_box.add_widget(self.search_input)
         search_layout.add_widget(search_box)
 
-        # リアルタイム更新用のスケジューラー（5秒ごとにチェック）
         self.update_event = Clock.schedule_interval(self.check_for_updates, 5)
-        # -------- チャットリストスクロール --------
+        
         scroll = ScrollView(size_hint=(1, 1))
-        # ← ここに置く！！！
+        
         def disable_scroll_on_focus(instance, value):
-            if value:       # フォーカスされた瞬間
-                scroll.scroll_y = 1  # 完全に上へ固定（動かないようにする）
+            if value:
+                scroll.scroll_y = 1
         self.search_input.bind(focus=disable_scroll_on_focus)
         
         self.chat_list = GridLayout(cols=1, spacing=1, size_hint_y=None)
@@ -363,6 +350,22 @@ class MainLayout(BoxLayout):
         self.add_widget(scroll)
 
         self.load_chats()
+
+    # 🔥 Androidの戻るボタン処理を追加
+    def on_back_button(self, window, key, *args):
+        """Androidの戻るボタンでmap画面に戻る"""
+        if key == 27:  # ESC / Android戻るボタン
+            if self.app_instance:
+                self.app_instance.open_map_screen()
+            return True  # イベントを消費
+        return False
+    
+    def __del__(self):
+        """ウィジェットが削除される時にイベントをアンバインド"""
+        try:
+            Window.unbind(on_keyboard=self.on_back_button)
+        except:
+            pass
 
     def _update_search_rect(self, instance, value):
         self.search_rect.pos = instance.pos
@@ -391,7 +394,6 @@ class MainLayout(BoxLayout):
                 self.chat_list.add_widget(no_result)
 
     def load_chats(self):
-        # friendテーブルから友達リストを取得
         url = f"{SUPABASE_URL}/rest/v1/friend"
         params = {
             "select": "send_user,recive_user,permission",
@@ -430,10 +432,8 @@ class MainLayout(BoxLayout):
             for friend in friends
         ]
 
-        # 一時リストに (friend_id, friend_name, icon_url, last_message, last_dt, last_sender)
         temp_items = []
         for friend_id in friend_ids:
-            # ユーザー情報取得
             user_url = f"{SUPABASE_URL}/rest/v1/users"
             user_params = {
                 "select": "user_name,icon_url",
@@ -455,7 +455,6 @@ class MainLayout(BoxLayout):
                 print(f"❌ ユーザー情報取得エラー: {e}")
                 continue
 
-            # 最新メッセージ取得
             chat_url = f"{SUPABASE_URL}/rest/v1/chat"
             chat_params = {
                 "select": "*",
@@ -474,27 +473,22 @@ class MainLayout(BoxLayout):
                     if messages:
                         msg = messages[0]
                         last_message = msg.get('log', last_message)
-                        # 組合せ日時
                         d = msg.get('date') or ''
                         t = msg.get('time') or ''
                         try:
                             last_dt = datetime.strptime(f"{d}T{t}", '%Y-%m-%dT%H:%M:%S')
                         except Exception:
                             last_dt = None
-                        # 送信者判定: userA_id または user_id フィールドを確認
                         last_sender = msg.get('userA_id') or msg.get('user_id') or None
             except Exception as e:
                 print(f"❌ メッセージ取得エラー: {e}")
 
             temp_items.append((friend_id, friend_name, icon_url, last_message, last_dt, last_sender))
 
-        # 最新日時でソート (None は最下)
         temp_items.sort(key=lambda x: x[4] or datetime.min, reverse=True)
 
-        # 表示用リストを生成
         self.all_chat_items = []
         for friend_id, friend_name, icon_url, last_message, last_dt, last_sender in temp_items:
-            # 既読判定と未読件数の算出: friend_id ごとに保存されたタイムスタンプより後に相手が送ったメッセージ数をカウント
             unread_count = 0
             try:
                 saved = self.chat_state.get(friend_id)
@@ -503,7 +497,6 @@ class MainLayout(BoxLayout):
                 else:
                     saved_dt = datetime.min
 
-                # メッセージを取得してカウント（最多 200 件を取得してカウント）
                 count_url = f"{SUPABASE_URL}/rest/v1/chat"
                 count_params = {
                     "select": "date,time,userA_id",
@@ -540,7 +533,6 @@ class MainLayout(BoxLayout):
             )
             self.all_chat_items.append(chat_item)
 
-        # 画面を最新順でクリアして追加
         self.chat_list.clear_widgets()
         for item in self.all_chat_items:
             self.chat_list.add_widget(item)
@@ -548,53 +540,11 @@ class MainLayout(BoxLayout):
     def check_for_updates(self, dt):
         """定期的にチャットリストを更新"""
         try:
-            # 検索中は更新しない
             if self.search_input.text.strip():
                 return
             
-            # データを再読み込み
             self.load_chats()
         except Exception as e:
             print(f"⚠️ 更新エラー: {e}")
 
 
-# -----------------------------
-class ChatListApp(App):
-    def build(self):
-        Window.softinput_mode = 'below_target'
-        self.main_layout = MainLayout(app_instance=self)
-        return self.main_layout
-
-    def open_chat(self, my_id, target_id):
-        self.root.clear_widgets()
-        chat_screen = ChatScreen(my_id, target_id, app_instance=self)
-        self.root.add_widget(chat_screen)
-
-    def back_to_list(self):
-        self.root.clear_widgets()
-        self.main_layout = MainLayout(app_instance=self)
-        self.root.add_widget(self.main_layout)
-
-    def move_chat_to_top(self, friend_id):
-        """既読状態の更新や新着でチャットを先頭に移動する。"""
-        try:
-            if hasattr(self, 'main_layout') and self.main_layout:
-                ml = self.main_layout
-                # find item
-                items = ml.all_chat_items
-                for idx, it in enumerate(items):
-                    if getattr(it, 'other_user_id', None) == friend_id:
-                        item = items.pop(idx)
-                        items.insert(0, item)
-                        break
-                # refresh widgets
-                ml.chat_list.clear_widgets()
-                for it in items:
-                    ml.chat_list.add_widget(it)
-        except Exception:
-            pass
-
-
-# -----------------------------
-if __name__ == '__main__':
-    ChatListApp().run()
