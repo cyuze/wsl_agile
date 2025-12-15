@@ -14,8 +14,15 @@ from kivy.uix.popup import Popup
 from account import AccountScreen
 from picture import PictureScreen
 from map import MainScreen
+from supabase import create_client, Client
+from settings import SettingsScreen
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
+
+# Supabase設定
+SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 class LoginForm(BoxLayout):
@@ -82,7 +89,7 @@ class LoginForm(BoxLayout):
             height=dp(45),
             multiline=False,
             background_color=get_color_from_hex('#ECF4E8'),
-            padding=[dp(10), dp(12), dp(10), dp(12)]
+            padding=[dp(10), dp(10), dp(10), dp(10)]
         )
         self.add_widget(self.email)
 
@@ -96,7 +103,7 @@ class LoginForm(BoxLayout):
             height=dp(45),
             multiline=False,
             background_color=get_color_from_hex('#ECF4E8'),
-            padding=[dp(10), dp(12), dp(10), dp(12)]
+            padding=[dp(10), dp(10), dp(10), dp(10)]
         )
         self.add_widget(self.password)
 
@@ -132,9 +139,8 @@ class LoginForm(BoxLayout):
 
         def on_login_release(instance):
             self.login_bg_color.rgba = get_color_from_hex('#ABE782')
-            # 直接map画面に遷移
-            if self.app_instance:
-                self.app_instance.open_map_screen()
+            # ログイン処理を実行
+            self.handle_login()
 
         login_btn.bind(on_press=on_login_press, on_release=on_login_release)
 
@@ -178,12 +184,65 @@ class LoginForm(BoxLayout):
         self.add_widget(signup_btn)
         self.add_widget(Widget(size_hint_y=None, height=dp(10)))
     
+    def handle_login(self):
+        """ログイン処理"""
+        email = self.email.text.strip()
+        password = self.password.text.strip()
+        
+        # 入力チェック
+        if not email or not password:
+            self.show_popup("入力エラー")
+            return
+        
+        try:
+            # Supabaseのusersテーブルから認証情報を取得
+            response = supabase.table('users').select('*').eq('user_mail', email).eq('user_pw', password).execute()
+            
+            # レスポンスのデバッグ出力
+            print(f"Supabase response: {response}")
+            
+            if response.data and len(response.data) > 0:
+                # ログイン成功
+                user = response.data[0]
+                
+                # JSONファイルに認証情報を保存
+                self.save_login_info(email, password)
+                
+                if self.app_instance:
+                    self.app_instance.current_user = user
+                    self.app_instance.open_map_screen()
+            else:
+                # ログイン失敗
+                self.show_popup("入力エラー")
+                
+        except Exception as e:
+            print(f"Login error: {str(e)}")
+            self.show_popup("入力エラー")
+    
+    def save_login_info(self, email, password):
+        """ログイン情報をJSONファイルに保存"""
+        import json
+        import os
+        
+        login_data = {
+            "user_mail": email,
+            "user_pw": password
+        }
+        
+        try:
+            # users.jsonに保存
+            with open('users.json', 'w', encoding='utf-8') as f:
+                json.dump([login_data], f, ensure_ascii=False, indent=2)
+            print(f"Login info saved to users.json")
+        except Exception as e:
+            print(f"Error saving login info: {str(e)}")
+    
     def show_popup(self, message):
         width = Window.width
         popup_width = min(width * 0.8, dp(300))
         
         popup = Popup(
-            title='通知',
+            title='',
             content=Label(text=message, font_name="Japanese", font_size=sp(14)),
             size_hint=(None, None),
             size=(popup_width, dp(180))
@@ -252,6 +311,7 @@ class WaitingApp(App):
     
     def back_to_login(self):
         """ログイン画面に戻る"""
+        self.current_user = None  # ログアウト時にユーザー情報をクリア
         self.root.clear_widgets()
         self.screen_manager = ScreenManager(transition=NoTransition())
         self.screen_manager.add_widget(LoginScreen(name="login", app_instance=self))
@@ -260,7 +320,7 @@ class WaitingApp(App):
         self.root.add_widget(self.screen_manager)
 
     # ======================================================
-    # ここから修正版（チャット機能の画面遷移）
+    # ここから修正版(チャット機能の画面遷移)
     # ======================================================
 
     def open_chat_list(self):
@@ -325,27 +385,19 @@ class WaitingApp(App):
 
 
     def open_settings(self):
-        """設定画面を開く"""
-        from settings import SettingsScreen
+            """設定画面を開く"""
+            if isinstance(self.root, ScreenManager):
+                if not self.root.has_screen("settings"):
+                    s = SettingsScreen(name="settings", app_instance=self)
+                    self.root.add_widget(s)
+                self.root.current = "settings"
 
-        if isinstance(self.root, ScreenManager):
-            if not self.root.has_screen("settings"):
-                
-                class SettingsWrap(Screen):
-                    def __init__(self, app_inst, **kwargs):
-                        super().__init__(name="settings", **kwargs)
-                        layout = SettingsScreen(app_instance=app_inst)
-                        self.add_widget(layout)
-
-                s = SettingsWrap(app_inst=self)
-                self.root.add_widget(s)
-
-            self.root.current = "settings"
             
     
     def open_friend_profile(self, friend_id):
         """フレンドプロフィール画面を開く"""
         from friend_profile import FriendProfileScreen
+        from kivy.core.window import Window
         
         if isinstance(self.root, ScreenManager):
             screen_name = f"friend_profile_{friend_id}"
@@ -354,8 +406,18 @@ class WaitingApp(App):
                 class FriendProfileWrap(Screen):
                     def __init__(self, friend_id, app_inst, **kwargs):
                         super().__init__(name=screen_name, **kwargs)
+                        self.app_inst = app_inst
                         profile = FriendProfileScreen(friend_id=friend_id, app_instance=app_inst)
                         self.add_widget(profile)
+                        # キーボードイベントをバインド
+                        Window.bind(on_keyboard=self.on_back_button)
+                    
+                    def on_back_button(self, window, key, *args):
+                        """戻るボタン処理"""
+                        if key == 27 and self.manager and self.manager.current == self.name:
+                            self.manager.current = "account"
+                            return True
+                        return False
                 
                 new_screen = FriendProfileWrap(friend_id, app_inst=self)
                 self.root.add_widget(new_screen)
@@ -386,6 +448,22 @@ class WaitingApp(App):
 
             # 画面を切り替える
             self.root.current = screen_name
+            
+    def open_picture(self, caller="settings"):
+        """画像選択画面を開く"""
+        if isinstance(self.root, ScreenManager):
+            # まだ picture 画面が登録されていなければ追加
+            if not self.root.has_screen("picture"):
+                pic_screen = PictureScreen(name="picture")
+                self.root.add_widget(pic_screen)
+
+            # 呼び出し元を記録
+            pic_screen = self.root.get_screen("picture")
+            pic_screen.caller = caller
+
+            # 画面遷移
+            self.root.current = "picture"
+
 
 
 

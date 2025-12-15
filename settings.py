@@ -13,9 +13,9 @@ from kivy.uix.stencilview import StencilView
 from kivy.graphics import Color, Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop, RoundedRectangle
 from kivy.metrics import dp, sp
 import requests
-from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
 from kivy.uix.scrollview import ScrollView
-
+from picture import PictureScreen
 
 
 
@@ -101,6 +101,12 @@ class RoundedButton(Button):
 class SettingsScreen(Screen):
     def __init__(self, app_instance=None, **kwargs):
         super().__init__(**kwargs)
+        self.current_user = {"user_name": "yuze"}  # ← 本来はログイン時にセット
+        
+        Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
+
+        self.app_instance = app_instance
+        Window.bind(on_keyboard=self.on_back_button)
 
         # 全体を縦に並べるレイアウト
         main_layout = BoxLayout(orientation="vertical")
@@ -161,12 +167,12 @@ class SettingsScreen(Screen):
             height=Sdp(160)
         )
         profile_layout.add_widget(Widget(size_hint_x=0.3))
-        profile_icon = CircleImageView(
+        self.profile_icon = CircleImageView(
             source=img_url,
             size_hint=(None, None),
             size=(Sdp(120), Sdp(120))
         )
-        profile_layout.add_widget(profile_icon)
+        profile_layout.add_widget(self.profile_icon)
         name_label = Label(
             text=user_name,
             font_size=Ssp(32),
@@ -276,8 +282,9 @@ class SettingsScreen(Screen):
     # イベントハンドラ
     def on_imgEdit_press(self, instance):
         print("画像編集ボタンが押されました。編集画面に遷移します。")
-        # self.manager.current = "friend_request" などにすると画面遷移可能
-        self.manager.current = "friend_request" 
+        if self.app_instance:
+            self.app_instance.open_picture(caller="settings")
+
 
     def on_nameEdit_press(self, instance):
         print("名前編集ボタンが押されました。編集画面に遷移します。")
@@ -288,15 +295,85 @@ class SettingsScreen(Screen):
         
     def on_submit_press(self, instance):
         print("確定ボタンが押されました。変更内容を確定します。")
+        
+    def update_icon_image(self, image_path):
+        """設定画面のアイコン画像を更新"""
+        if self.profile_icon:
+            self.profile_icon.source = image_path
+            # AsyncImage を直接更新
+            self.profile_icon.img.source = image_path
+            self.profile_icon.img.reload()
+
+
+    def update_user_icon(self, icon_path):
+        """ログイン中ユーザーのアイコンを更新"""
+        try:
+            user_name = self.current_user["user_name"]
+
+            # ファイル名を決定
+            safe_name = user_name.replace('@', '_at_').replace('.', '_')
+            file_name = f"{safe_name}_icon.png"
+
+            # 画像ファイル読み込み
+            with open(icon_path, "rb") as f:
+                image_data = f.read()
+
+            # Storage にアップロード（上書き）
+            storage_url = f"{SUPABASE_URL}/storage/v1/object/icon/{file_name}"
+            storage_headers = {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "image/png",
+                "x-upsert": "true"
+            }
+            res = requests.post(storage_url, headers=storage_headers, data=image_data)
+
+            if res.status_code not in [200, 201]:
+                print("Storage error:", res.text)
+                return False
+
+            # 公開 URL
+            public_url = f"{SUPABASE_URL}/storage/v1/object/public/icon/{file_name}"
+
+            # users テーブルを UPDATE
+            db_url = f"{SUPABASE_URL}/rest/v1/users"
+            params = {"user_name": f"eq.{user_name}"}
+            payload = {"icon_url": public_url}
+            res = requests.patch(db_url, headers=headers, params=params, json=payload)
+
+            if res.status_code == 200:
+                print("アイコン更新成功")
+                return True
+            else:
+                print("DB error:", res.text)
+                return False
+
+        except Exception as e:
+            print("更新失敗:", e)
+            return False
+        
+    def on_back_button(self, window, key, *args):
+        if key == 27 and self.manager.current == "settings":
+            print("戻るボタン: map に戻ります")
+            if self.app_instance:
+                self.app_instance.back_to_map()
+                return True
+        return False
+
+
 
 class SettingsApp(App):
     def build(self):
-        sm = ScreenManager()
-        sm.add_widget(SettingsScreen(name="settings"))
-        sm.current = "settings"  # 起動時は設定画面
-        return sm
+        self.sm = ScreenManager(transition=NoTransition())
+        self.sm.add_widget(SettingsScreen(name="settings"))
+        self.sm.add_widget(PictureScreen(name="picture"))
+        # ここで friend_request 画面も追加しておくと戻る遷移が動作する
+        # self.sm.add_widget(FriendRequestScreen(name="friend_request"))
 
-    
+        self.sm.current = "settings"  # 起動時は設定画面
+
+        
+
 
 if __name__ == "__main__":
     SettingsApp().run()

@@ -194,13 +194,38 @@ class FriendRequestScreen(Screen):
 
         scroll.add_widget(list_layout)
         root_layout.add_widget(scroll)
+        
 
         # Screen に追加
         self.add_widget(root_layout)
+        
 
-    # 戻るボタンや設定画面に戻る処理を追加したい場合
-    def go_back(self, *args):
-        self.manager.current = "settings"
+    def on_enter(self):
+        """画面表示時にキーボードイベントをバインド"""
+        Window.bind(on_keyboard=self.on_back_button)
+    
+    def on_leave(self):
+        """画面離脱時にキーボードイベントをアンバインド"""
+        Window.unbind(on_keyboard=self.on_back_button)
+
+    def on_back_button(self, window, key, *args):
+        """Androidの戻るボタン処理"""
+        # key=27 が ESC / Android 戻るボタン
+        if key == 27:
+            print(f"Back button pressed. Current screen: {self.manager.current if self.manager else 'No manager'}")
+            print(f"Available screens: {[s.name for s in self.manager.screens] if self.manager else 'No manager'}")
+            
+            if self.manager:
+                # friend_add画面が存在するか確認
+                if self.manager.has_screen("friend_add"):
+                    self.manager.current = "friend_add"
+                    return True
+                else:
+                    print("friend_add screen not found!")
+            else:
+                print("self.manager is None!")
+        return False
+    
         
 class FriendRequestApp(App):
     def build(self):

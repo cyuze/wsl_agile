@@ -153,13 +153,25 @@ class ImageSelectScreen(BoxLayout):
             self.btn_overlay_color.rgba = (0, 0, 0, 0)
             if self.selected_item:
                 print("選択:", self.selected_item.source)
-                # アカウント画面に戻り、選択した画像を渡す
                 if self.screen_manager:
-                    account_screen = self.screen_manager.get_screen("account")
-                    account_screen.form.update_icon_image(self.selected_item.source)
-                    self.screen_manager.current = "account"
+                    picture_screen = self.screen_manager.get_screen("picture")
+                    caller = picture_screen.caller
+
+                    if caller == "account":
+                        account_screen = self.screen_manager.get_screen("account")
+                        account_screen.form.update_icon_image(self.selected_item.source)
+                        self.screen_manager.current = "account"
+
+                    elif caller == "settings":
+                        settings_screen = self.screen_manager.get_screen("settings")
+                        settings_screen.update_user_icon(self.selected_item.source)   # DB更新
+                        settings_screen.update_icon_image(self.selected_item.source)  # UI更新
+                        self.screen_manager.current = "settings"
+
+
             else:
                 print("画像未選択")
+
 
         self.done_btn.bind(pos=update_btn_graphics, size=update_btn_graphics)
         self.done_btn.bind(on_press=on_press)
@@ -241,12 +253,29 @@ class ImageSelectScreen(BoxLayout):
 class PictureScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.caller = None
 
         Window.clearcolor = get_color_from_hex('#ECF4E8')
 
         self.image_select = ImageSelectScreen(screen_manager=None)
         self.add_widget(self.image_select)
+        
+        Window.bind(on_keyboard=self.on_back_button)
     
     def on_enter(self):
         # 画面に入った時にscreen_managerを設定
         self.image_select.screen_manager = self.manager
+    def on_back_button(self, window, key, *args):
+        """Androidの戻るボタン処理"""
+        # key=27 が ESC / Android 戻るボタン
+        if key == 27:
+            if self.manager and self.manager.current == "picture":
+                # callerに応じて戻る先を決定
+                if hasattr(self, 'caller') and self.caller == "account":
+                    self.manager.current = "account"
+                elif hasattr(self, 'caller') and self.caller == "settings":
+                    self.manager.current = "settings"
+                else:
+                    self.manager.current = "login"
+                return True  # イベントを消費（アプリ終了しない）
+        return False
