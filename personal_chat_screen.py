@@ -10,6 +10,7 @@ from kivy.uix.image import AsyncImage
 from kivy.graphics import Color, RoundedRectangle, Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop
 from kivy.core.text import LabelBase
 from kivy.config import Config
+import os
 # システムのソフトキーボード（IME）を利用する設定
 Config.set('kivy', 'keyboard_mode', 'system')
 from kivy.core.window import Window
@@ -75,9 +76,11 @@ class CircularImage(StencilView):
 
 # ===== メッセージバブル =====
 class MessageBubble(BoxLayout):
-    def __init__(self, text, time, is_sent=False, icon_url=None, **kwargs):
+    def __init__(self, text, time, is_sent=False, icon_url=None, is_image=False, **kwargs):
         # 長押し用の変数とmessage_idを先に取得
         self.message_id = kwargs.pop('message_id', None)
+        self.is_image = is_image
+
         super().__init__(**kwargs)
         self.is_sent = is_sent
         self.orientation = 'horizontal'
@@ -94,17 +97,29 @@ class MessageBubble(BoxLayout):
             self.add_widget(Widget())
             message_box = BoxLayout(orientation='vertical', size_hint_x=None, spacing=2)
             
-            bubble = Label(
-                text=text,
-                halign='right',
-                valign='top',
-                padding=[2, 2],
-                color=(0, 0, 0, 1),
-                font_name='NotoSansJP',
-                font_size='14sp',
-                size_hint=(None, None),
-                text_size=(None, None)
-            )
+            if is_image:
+                # 画像メッセージの場合
+                bubble = AsyncImage(
+                    source=text,  # textにはURL
+                    size_hint=(None, None),
+                    size=(300, 300),
+                    allow_stretch=True,
+                    keep_ratio=True
+                )
+                message_box.width = 300
+            else:
+                # テキストメッセージの場合
+                bubble = Label(
+                    text=text,
+                    halign='right',
+                    valign='top',
+                    padding=[2, 2],
+                    color=(0, 0, 0, 1),
+                    font_name='NotoSansJP',
+                    font_size='14sp',
+                    size_hint=(None, None),
+                    text_size=(None, None)
+                )
             bubble.bind(texture_size=bubble.setter('size'))
 
             max_width = Window.width * 0.6
@@ -178,17 +193,29 @@ class MessageBubble(BoxLayout):
 
             message_box = BoxLayout(orientation='vertical', size_hint_x=None, spacing=2)
             
-            bubble = Label(
-                text=text,
-                halign='left',
-                valign='top',
-                padding=[2, 2],
-                color=(0, 0, 0, 1),
-                font_name='NotoSansJP',
-                font_size='14sp',
-                size_hint=(None, None),
-                text_size=(None, None)
-            )
+            if is_image:
+                # 画像メッセージの場合
+                bubble = AsyncImage(
+                    source=text,  # textにはURL
+                    size_hint=(None, None),
+                    size=(300, 300),
+                    allow_stretch=True,
+                    keep_ratio=True
+                )
+                message_box.width = 300
+            else:
+                # テキストメッセージの場合
+                bubble = Label(
+                    text=text,
+                    halign='left',
+                    valign='top',
+                    padding=[2, 2],
+                    color=(0, 0, 0, 1),
+                    font_name='NotoSansJP',
+                    font_size='14sp',
+                    size_hint=(None, None),
+                    text_size=(None, None)
+                )
             bubble.bind(texture_size=bubble.setter('size'))
 
             max_width = Window.width * 0.6
@@ -520,6 +547,21 @@ class ChatScreen(BoxLayout):
         except Exception:
             pass
 
+        # チャット画面を離れる（戻る）ときは、
+        # その会話を既読として現在時刻をチャット状態に保存する
+        try:
+            import os
+            state_path = os.path.join(os.path.dirname(__file__), 'chat_state.json')
+            state = {}
+            if os.path.exists(state_path):
+                with open(state_path, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+            state[self.target_id] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            with open(state_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f)
+        except Exception as e:
+            print(f"⚠️ 既読状態保存エラー (go_back): {e}")
+
         if self.app_instance:
             # 同じキーイベントが続けて別のハンドラに届くことを防ぐため、
             # 画面遷移をわずかに遅延させる（キーイベントのディスパッチが終わるまで待つ）
@@ -692,12 +734,18 @@ class ChatScreen(BoxLayout):
         is_sent = (msg.get('userA_id') == self.my_id)
         text = msg.get('log', '')
         time_str = str(msg.get('time', ''))[:5]
-        message_id = msg.get('chat_id')  
+        message_id = msg.get('chat_id')
+        
+        # 画像メッセージかどうかを判定
+        is_image = text.startswith('[IMAGE]')
+        if is_image:
+            text = text.replace('[IMAGE]', '')  # プレフィックスを削除してURLのみにする
 
         bubble = MessageBubble(
             text=text,
             time=time_str,
             is_sent=is_sent,
+            is_image=is_image,
             icon_url=None if is_sent else self.other_icon_url,
             message_id=message_id  
         )
