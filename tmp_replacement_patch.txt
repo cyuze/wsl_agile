@@ -1,0 +1,42 @@
+REPLACE_START
+# -----------------------------
+class ChatListApp(App):
+    def build(self):
+        Window.softinput_mode = 'below_target'
+        self.main_layout = MainLayout(app_instance=self)
+        return self.main_layout
+
+    def open_chat(self, my_id, target_id):
+        self.root.clear_widgets()
+        chat_screen = ChatScreen(my_id, target_id, app_instance=self)
+        self.root.add_widget(chat_screen)
+
+    def back_to_list(self):
+        self.root.clear_widgets()
+        self.main_layout = MainLayout(app_instance=self)
+        self.root.add_widget(self.main_layout)
+
+    def move_chat_to_top(self, friend_id):
+        """既読状態の更新や新着でチャットを先頭に移動する。"""
+        try:
+            if hasattr(self, 'main_layout') and self.main_layout:
+                ml = self.main_layout
+                # find item
+                items = ml.all_chat_items
+                for idx, it in enumerate(items):
+                    if getattr(it, 'other_user_id', None) == friend_id:
+                        item = items.pop(idx)
+                        items.insert(0, item)
+                        break
+                # refresh widgets
+                ml.chat_list.clear_widgets()
+                for it in items:
+                    ml.chat_list.add_widget(it)
+        except Exception:
+            pass
+
+
+# -----------------------------
+if __name__ == '__main__':
+    ChatListApp().run()
+REPLACE_END

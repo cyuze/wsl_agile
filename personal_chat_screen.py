@@ -353,21 +353,6 @@ class ChatScreen(BoxLayout):
             size=lambda i, v: setattr(self.header_line, 'size', (i.width, 2))
         )
         
-        # 戻るボタン
-        back_button = ImageButton(
-            source='img/Left.png',
-            size_hint=(None, None),
-            size=(120, 120),
-            allow_stretch=True,
-            keep_ratio=True,
-            on_press=self.go_back
-        )
-        # 戻るボタンを縦中央に配置するコンテナ
-        back_container = BoxLayout(orientation='vertical', size_hint=(None, 1), width=back_button.size[0])
-        back_container.add_widget(Widget())
-        back_container.add_widget(back_button)
-        back_container.add_widget(Widget())
-        
         # (ユーザー情報を取得してからアイコンを作成します)
 
         # 相手の情報を取得
@@ -418,7 +403,7 @@ class ChatScreen(BoxLayout):
         title_container.add_widget(name_label)
         title_container.add_widget(Widget())
         
-        header.add_widget(back_container)
+
         header.add_widget(Widget())
         header.add_widget(title_container)
         header.add_widget(Widget())
@@ -482,8 +467,20 @@ class ChatScreen(BoxLayout):
         input_layout.add_widget(send_container)
         self.add_widget(input_layout)
 
+        # ハードキー（戻る）イベントを登録
         Window.bind(on_key_down=self.on_keyboard)
         self.load_messages()
+        # 親ウィジェットが外れた（ウィジェットが破棄された/画面から離れた）ときに
+        # イベントハンドラを解除するためのバインド
+        def _on_parent_change(instance, parent):
+            if parent is None:
+                try:
+                    Window.unbind(on_key_down=self.on_keyboard)
+                except Exception:
+                    pass
+
+        self.bind(parent=_on_parent_change)
+
         # リアルタイム更新用のスケジューラー（3秒ごとにチェック）
         self.last_message_count = 0
         self.update_event = Clock.schedule_interval(self.check_new_messages, 3)
@@ -502,6 +499,11 @@ class ChatScreen(BoxLayout):
             Clock.schedule_once(scroll_to_bottom, 0.25)
 
     def on_keyboard(self, window, key, scancode, codepoint, modifier):
+        # Androidの戻るボタン処理
+        if key == 27:  # ESC / Android戻るボタン
+            self.go_back(None)
+            return True  # イベントを消費
+        
         # 日本語IME の確定（Enter）と送信操作が競合しないよう、
         # ここでは Ctrl+Enter (または Cmd+Enter) を送信ショートカットに割り当てる。
         # 普通の Enter は改行／IME確定に使用される。
@@ -512,8 +514,17 @@ class ChatScreen(BoxLayout):
         return False
 
     def go_back(self, instance):
+        # 戻る時はまずキーイベントを解除してから画面遷移
+        try:
+            Window.unbind(on_key_down=self.on_keyboard)
+        except Exception:
+            pass
+
         if self.app_instance:
-            self.app_instance.back_to_list()
+            # 同じキーイベントが続けて別のハンドラに届くことを防ぐため、
+            # 画面遷移をわずかに遅延させる（キーイベントのディスパッチが終わるまで待つ）
+            from kivy.clock import Clock
+            Clock.schedule_once(lambda dt: self.app_instance.back_to_list(), 0.06)
 
     def add_date_label(self, date_str):
         """日付ラベルを追加"""
