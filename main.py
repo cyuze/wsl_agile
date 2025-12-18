@@ -1,3 +1,7 @@
+from kivy.config import Config
+# Kivy 内蔵の仮想キーボード（黒い小さなキーボード）を使わず、OS の IME を使う
+Config.set('kivy', 'keyboard_mode', 'system')
+
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
@@ -5,6 +9,10 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.core.text import LabelBase
 from kivy.core.window import Window
+try:
+    Window.softinput_mode = 'below_target'
+except Exception:
+    pass
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
 from kivy.graphics import Color, RoundedRectangle
