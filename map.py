@@ -18,6 +18,7 @@ from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import AsyncImage
 from kivy.graphics import Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop
+from personal_chat_screen import ChatScreen
 
 
 # Android 権限
@@ -231,8 +232,23 @@ class MainScreen(FloatLayout):
             print("💻 デバッグモード開始")
             self.start_debug_mode()
 
-        Clock.schedule_interval(self.update_friends, 5)
-
+        
+        # スケジュールを保存
+        self.friend_update_event = Clock.schedule_interval(self.update_friends, 5)
+        if not HAS_GPS:
+            self.location_event = Clock.schedule_interval(self.simulate_location, 3)
+    
+    def stop_updates(self):
+        """画面離脱時に定期処理を停止"""
+        if hasattr(self, 'friend_update_event'):
+            self.friend_update_event.cancel()
+        if hasattr(self, 'location_event'):
+            self.location_event.cancel()
+        if HAS_GPS:
+            try:
+                gps.stop()
+            except:
+                pass
 
     # ======================================
     # 4つのボタン処理
@@ -393,6 +409,10 @@ class MyApp(App):
     
     # 以下を追加
     def open_chat_list(self):
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
         """チャット一覧画面を開く"""
         from chat_screen import MainLayout
         self.root.clear_widgets()
@@ -419,6 +439,12 @@ class MyApp(App):
             
     def back_to_map(self):
         """マップ画面に戻る"""
+        # 現在の画面がChatScreenなら停止
+        if hasattr(self.root, 'children'):
+            for child in self.root.children:
+                if isinstance(child, ChatScreen):
+                    child.stop_updates()
+        
         self.root.clear_widgets()
         self.main_screen = MainScreen(app_instance=self)
         self.root.add_widget(self.main_screen)

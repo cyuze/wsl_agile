@@ -511,7 +511,22 @@ class ChatScreen(BoxLayout):
         # リアルタイム更新用のスケジューラー（3秒ごとにチェック）
         self.last_message_count = 0
         self.update_event = Clock.schedule_interval(self.check_new_messages, 3)
+    
+    def stop_updates(self):
+        """画面離脱時に定期処理を停止"""
+        if hasattr(self, 'update_event') and self.update_event:
+            self.update_event.cancel()
+            print("チャット更新を停止しました")
+    
+    def go_back(self, instance):
+        # 定期処理を停止
+        self.stop_updates()
         
+        # 戻る時はまずキーイベントを解除してから画面遷移
+        try:
+            Window.unbind(on_key_down=self.on_keyboard)
+        except Exception:
+            pass
 
     def on_input_focus(self, instance, value):
         if value:
