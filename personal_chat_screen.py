@@ -11,12 +11,12 @@ from kivy.graphics import Color, RoundedRectangle, Ellipse, StencilPush, Stencil
 from kivy.core.text import LabelBase
 from kivy.config import Config
 import os
-# システムのソフトキーボード（IME）を利用する設定
+# システムのソフトキーボード（IME）を利用し、Kivy の仮想キーボードを使わない設定
 Config.set('kivy', 'keyboard_mode', 'system')
 from kivy.core.window import Window
-# ソフトキーボード表示時にウィンドウを自動でパンして入力欄を見えるようにする
+# Android ではキーボードが入力欄の下に表示されるようにする（押し上げなし）
 try:
-    Window.softinput_mode = 'pan'
+    Window.softinput_mode = 'below_target'
 except Exception:
     # 古い環境や非対応プラットフォームでは無視
     pass
