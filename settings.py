@@ -106,7 +106,6 @@ class SettingsScreen(Screen):
         Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
 
         self.app_instance = app_instance
-        Window.bind(on_keyboard=self.on_back_button)
 
         # 全体を縦に並べるレイアウト
         main_layout = BoxLayout(orientation="vertical")
@@ -352,10 +351,19 @@ class SettingsScreen(Screen):
             print("更新失敗:", e)
             return False
         
+    def on_enter(self):
+        """この画面が表示される時にキーボードイベントをバインド"""
+        Window.bind(on_keyboard=self.on_back_button)
+
+    def on_leave(self):
+        """この画面が離れる時にキーボードイベントをアンバインド"""
+        try:
+            Window.unbind(on_keyboard=self.on_back_button)
+        except:
+            pass
+
     def on_back_button(self, window, key, *args):
-        if key == 27 and self.manager.current == "settings":
-            print("戻るボタン: map に戻ります")
-            if self.app_instance:
+        if key == 27:
                 self.app_instance.back_to_map()
                 return True
         return False
