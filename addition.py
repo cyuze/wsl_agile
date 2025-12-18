@@ -40,7 +40,7 @@ class LayeredTextInput(FloatLayout):
             self.bg_rect = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(12)])
 
         self.text_input = TextInput(
-            hint_text="友人のIDを入力または検索",
+            hint_text="友人のメールアドレスを入力",
             font_name="Japanese",
             font_size=sp(14),
             foreground_color=(0, 0, 0, 1),
@@ -73,7 +73,6 @@ class LayeredTextInput(FloatLayout):
         self.bg_rect.radius = [dp(12)]
 
 
-# ✅ レスポンシブ対応のタイトルボタン
 # ✅ レスポンシブ対応のタイトルボタン
 class OverlappingButton(FloatLayout):
     def __init__(self, parent_app=None, **kwargs):
@@ -116,7 +115,7 @@ class OverlappingButton(FloatLayout):
         def on_release(instance):
             self.bg_color.rgba = get_color_from_hex('#ABE782')
             
-            print("Button clicked!")  # デバッグ
+            print("Button clicked!")
             
             if self.parent_app:
                 print(f"parent_app exists: {self.parent_app}")
@@ -191,6 +190,7 @@ class UserInfoRow(BoxLayout):
         
         self.parent_app = parent_app
         self.update_height()
+        self.found_user_id = None  # 検索で見つかったユーザーIDを保存
 
         with self.canvas.before:
             Color(rgba=get_color_from_hex('#CBF3BB'))
@@ -279,8 +279,9 @@ class UserInfoRow(BoxLayout):
         self.update_height()
         self.update_button_size()
 
-    def set_username(self, username):
+    def set_username(self, username, user_id=None):
         self.name_label.text = username
+        self.found_user_id = user_id
 
     def update_bg(self, *args):
         self.bg_rect.pos = self.pos
@@ -293,11 +294,9 @@ class FriendApp(BoxLayout):
     def __init__(self, **kwargs):
         # カスタムパラメータを先に取り出す
         self.user_id = kwargs.pop('user_id', None)
-        self.app_instance = kwargs.pop('app_instance', None)  # 追加
+        self.app_instance = kwargs.pop('app_instance', None)
         
-        # super().__init__() を呼ぶ
         super().__init__(orientation='vertical', spacing=0, **kwargs)
-        
         
         Window.clearcolor = get_color_from_hex("#ECF4E8")
         self.search_scheduled = None
@@ -308,12 +307,11 @@ class FriendApp(BoxLayout):
         
     def on_back_button(self, window, key, *args):
         """Androidの戻るボタン処理"""
-        # key=27 が ESC / Android 戻るボタン
         if key == 27:
             if self.app_instance and hasattr(self.app_instance, 'screen_manager'):
                 if self.app_instance.screen_manager.current == "friend_add":
                     self.app_instance.back_to_map()
-                    return True  # イベントを消費（アプリ終了しない）
+                    return True
         return False
 
     def get_content_width(self):
@@ -363,22 +361,23 @@ class FriendApp(BoxLayout):
         self.add_widget(Widget(size_hint_y=1))
 
     def search_user(self):
-        user_id = self.id_input.text_input.text.strip()
+        user_mail = self.id_input.text_input.text.strip()
 
-        if not user_id:
+        if not user_mail:
             self.user_info.set_username("")
             return
 
         try:
             url = f"{SUPABASE_URL}/rest/v1/users"
-            params = {"select": "user_name", "user_id": f"eq.{user_id}"}
+            params = {"select": "user_name,user_id", "user_mail": f"eq.{user_mail}"}
             res = requests.get(url, headers=headers, params=params, timeout=10)
             
             if res.status_code == 200:
                 result = res.json()
                 if result and len(result) > 0:
                     username = result[0].get("user_name", "")
-                    self.user_info.set_username(username)
+                    user_id = result[0].get("user_id", "")
+                    self.user_info.set_username(username, user_id)
                 else:
                     self.user_info.set_username("ユーザーが見つかりません")
             else:
@@ -390,12 +389,13 @@ class FriendApp(BoxLayout):
             self.user_info.set_username("エラー")
 
     def send_request(self, instance):
-        friend_id = self.id_input.text_input.text.strip()
+        # 検索で見つかったユーザーIDを使用
+        friend_id = self.user_info.found_user_id
         
-        my_id = "dummy_user_id"
+        my_id = "cb3cce5a-3ec7-4837-b998-fd9d5446f04a"
         
         if not friend_id:
-            self.show_popup("IDを入力してください")
+            self.show_popup("ユーザーを検索してください")
             return
             
         try:
@@ -434,11 +434,9 @@ class FriendApp(BoxLayout):
 
 class FriendAppMain(App):
     def build(self):
-
         root = AnchorLayout(anchor_x='center', anchor_y='top')
         app_layout = FriendApp(size_hint=(1, 1))
         root.add_widget(app_layout)
-        
         return root
 
 
