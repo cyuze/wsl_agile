@@ -315,18 +315,18 @@ class MainLayout(BoxLayout):
         self.search_input = TextInput(
             hint_text='検索',
             size_hint_x=1,
+            size_hint_y=None,          # ← 高さを固定するために追加
+            height=70,                 # ← 適切な高さを指定
+            background_normal='',      # 背景画像を無効化
             background_color=(1, 1, 1, 1),
             foreground_color=(0, 0, 0, 1),
             multiline=False,
             font_size='16sp',
             font_name='NotoSansJP',
-            input_type='text',     
+            input_type='text',
+            halign='left',
         )
 
-        def adjust_padding(instance, value):
-            instance.padding_y = (instance.height - instance.line_height) / 2
-
-        self.search_input.bind(size=adjust_padding)
         self.search_input.bind(text=self.on_search_text)
 
         search_box.add_widget(search_icon)
