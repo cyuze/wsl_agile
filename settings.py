@@ -51,10 +51,13 @@ def get_user_by_mail(user_mail: str):
 
 row = get_user_by_mail(user_mail)
 if row is None:
-    raise Exception("ユーザーが見つかりませんでした。")
-
-user_name = row["user_name"]
-img_url = row["icon_url"]
+    # デフォルト値を設定（ユーザーが見つからない場合）
+    user_name = "ゲストユーザー"
+    img_url = "img/cat_placeholder.png"  # デフォルト画像
+    print(f"警告: メール '{user_mail}' のユーザーが見つかりませんでした。デフォルト値を使用します。")
+else:
+    user_name = row["user_name"]
+    img_url = row["icon_url"]
 
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
