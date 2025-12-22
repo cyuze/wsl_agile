@@ -38,12 +38,21 @@ def get_user(user_name: str):
         return None
     return data[0]
 
-row = get_user("yuze")
-if row is None:
-    raise Exception("ユーザーが見つかりませんでした。")
+# デフォルト値を設定(実際の使用時に取得)
+user_name = ""
+img_url = "https://impklpvfmyvydnoayhfj.supabase.co/storage/v1/object/public/user_icons/default.png"
 
-user_name = row["user_name"]
-img_url = row["icon_url"]
+# ユーザー情報を取得する関数
+def load_user_info():
+    global user_name, img_url
+    try:
+        row = get_user("")
+        if row is not None:
+            user_name = row["user_name"]
+            img_url = row["icon_url"]
+    except Exception as e:
+        print(f"ユーザー情報の取得に失敗しました: {e}")
+        # デフォルト値を使用
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
@@ -101,6 +110,10 @@ class RoundedButton(Button):
 class SettingsScreen(Screen):
     def __init__(self, app_instance=None, **kwargs):
         super().__init__(**kwargs)
+        
+        # ユーザー情報を読み込む
+        load_user_info()
+        
         self.current_user = {"user_name": "yuze"}  # ← 本来はログイン時にセット
         
         Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
