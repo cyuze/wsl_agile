@@ -291,7 +291,10 @@ class AccountForm(BoxLayout):
                 print("入力が不足しています")
                 return
 
-            self.register_user(user_name, user_pw, user_mail, icon_path)
+            # パスワードをハッシュ化
+            hashed_pw = hashlib.sha256(user_pw.encode('utf-8')).hexdigest()
+            
+            self.register_user(user_name, hashed_pw, user_mail, icon_path)
 
         def register_user(user_name, user_pw, user_mail, icon_path):
             try:

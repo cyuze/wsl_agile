@@ -204,6 +204,9 @@ class LoginForm(BoxLayout):
             return
 
         try:
+            # 入力されたパスワードをハッシュ化
+            hashed_password = hashlib.sha256(password.encode('utf-8')).hexdigest()
+            
             # Supabase REST API: usersテーブルを直接叩く
             url = f"{SUPABASE_URL}/rest/v1/users"
             headers = {
@@ -226,7 +229,8 @@ class LoginForm(BoxLayout):
 
                 if data and len(data) > 0:
                     user = data[0]
-                    self.save_login_info(email, password)
+                    # ハッシュ値をJSONに保存
+                    self.save_login_info(email, hashed_password)
 
                     if self.app_instance:
                         self.app_instance.current_user = user
