@@ -1,3 +1,5 @@
+import os
+import json
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
@@ -27,9 +29,18 @@ headers = {
     "Authorization": f"Bearer {SUPABASE_KEY}",
 }
 
-def get_user(user_name: str):
+# JSON読み込み
+json_path = os.path.join(os.path.dirname(__file__), "users.json")
+with open(json_path, "r", encoding="utf-8") as f:
+    users = json.load(f)
+
+# 先頭ユーザのメールを取得
+user_mail = users[0]["user_mail"]
+
+
+def get_user_by_mail(user_mail: str):
     url = f"{SUPABASE_URL}/rest/v1/users"
-    params = {"select": "user_id,user_name,icon_url", "user_name": f"eq.{user_name}"}
+    params = {"select": "user_id,user_name,icon_url", "user_mail": f"eq.{user_mail}"}
     res = requests.get(url, headers=headers, params=params)
     if res.status_code != 200:
         raise Exception(f"Supabase error {res.status_code}: {res.text}")
@@ -38,21 +49,13 @@ def get_user(user_name: str):
         return None
     return data[0]
 
-# デフォルト値を設定(実際の使用時に取得)
-user_name = ""
-img_url = "https://impklpvfmyvydnoayhfj.supabase.co/storage/v1/object/public/user_icons/default.png"
+row = get_user_by_mail(user_mail)
+if row is None:
+    raise Exception("ユーザーが見つかりませんでした。")
 
-# ユーザー情報を取得する関数
-def load_user_info():
-    global user_name, img_url
-    try:
-        row = get_user("")
-        if row is not None:
-            user_name = row["user_name"]
-            img_url = row["icon_url"]
-    except Exception as e:
-        print(f"ユーザー情報の取得に失敗しました: {e}")
-        # デフォルト値を使用
+user_name = row["user_name"]
+img_url = row["icon_url"]
+
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
@@ -119,6 +122,7 @@ class SettingsScreen(Screen):
         Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
 
         self.app_instance = app_instance
+        Window.bind(on_keyboard=self.on_back_button)
 
         # 全体を縦に並べるレイアウト
         main_layout = BoxLayout(orientation="vertical")
@@ -364,19 +368,10 @@ class SettingsScreen(Screen):
             print("更新失敗:", e)
             return False
         
-    def on_enter(self):
-        """この画面が表示される時にキーボードイベントをバインド"""
-        Window.bind(on_keyboard=self.on_back_button)
-
-    def on_leave(self):
-        """この画面が離れる時にキーボードイベントをアンバインド"""
-        try:
-            Window.unbind(on_keyboard=self.on_back_button)
-        except:
-            pass
-
     def on_back_button(self, window, key, *args):
-        if key == 27:
+        if key == 27 and self.manager.current == "settings":
+            print("戻るボタン: map に戻ります")
+            if self.app_instance:
                 self.app_instance.back_to_map()
                 return True
         return False

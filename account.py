@@ -335,9 +335,11 @@ class AccountForm(BoxLayout):
 
                 # 5. users テーブルに insert（REST API使用）
                 db_url = f"{SUPABASE_URL}/rest/v1/users"
+                # パスワードをSHA-256でハッシュ化
+                hashed_pw = hashlib.sha256(user_pw.encode()).hexdigest()
                 data = {
                     "user_name": user_name,
-                    "user_pw": user_pw,
+                    "user_pw": hashed_pw,
                     "user_mail": user_mail,
                     "icon_url": public_url
                 }

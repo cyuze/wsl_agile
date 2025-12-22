@@ -15,6 +15,7 @@ from kivy.clock import Clock
 from kivy.metrics import dp, sp
 import requests
 from kivy.uix.screenmanager import ScreenManager
+import json
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 
@@ -305,6 +306,23 @@ class FriendApp(BoxLayout):
         
         Window.bind(on_keyboard=self.on_back_button)
         
+        # ログイン情報を読み込む
+        self.current_user_id = self.load_current_user_id()
+        
+    def load_current_user_id(self):
+        """users.jsonからログイン情報を読み込む"""
+        try:
+            with open('users.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if data and len(data) > 0:
+                    user_mail = data[0].get('user_mail')
+                    user_pw = data[0].get('user_pw')
+                    
+                    print(f"✅ ログインユーザー - メール: {user_mail}, パスワード: {user_pw}")
+                    
+        except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
+            print(f"❌ ログイン情報読み込みエラー: {e}")
+        
     def on_back_button(self, window, key, *args):
         """Androidの戻るボタン処理"""
         if key == 27:
@@ -392,7 +410,12 @@ class FriendApp(BoxLayout):
         # 検索で見つかったユーザーIDを使用
         friend_id = self.user_info.found_user_id
         
-        my_id = "cb3cce5a-3ec7-4837-b998-fd9d5446f04a"
+        # ログイン中のユーザーIDを使用
+        my_id = self.current_user_id
+        
+        if not my_id:
+            self.show_popup("ログイン情報が見つかりません")
+            return
         
         if not friend_id:
             self.show_popup("ユーザーを検索してください")

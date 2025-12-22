@@ -249,6 +249,7 @@ class MainScreen(FloatLayout):
                 gps.stop()
             except:
                 pass
+    
 
     # ======================================
     # 4つのボタン処理
