@@ -22,7 +22,7 @@ from kivy.uix.popup import Popup
 from account import AccountScreen
 from picture import PictureScreen
 from map import MainScreen
-from settings import SettingsScreen
+# settingsは後でインポート（ログイン後にユーザー情報が必要なため）
 import requests
 import json
 import hashlib
@@ -247,12 +247,10 @@ class LoginForm(BoxLayout):
 
 
     def save_login_info(self, email, password):
-        """ログイン情報をJSONファイルに保存（パスワードはハッシュ化）"""
-        # パスワードをSHA-256でハッシュ化
-        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        """ログイン情報をJSONファイルに保存（パスワードは既にハッシュ化済み）"""
         login_data = {
             "user_mail": email,
-            "user_pw": hashed_password
+            "user_pw": password  # 既にハッシュ化されているのでそのまま保存
         }
         try:
             with open('users.json', 'w', encoding='utf-8') as f:
@@ -410,6 +408,9 @@ class WaitingApp(App):
 
     def open_settings(self):
             """設定画面を開く"""
+            # settingsモジュールをここでインポート（ログイン後に呼ばれるため）
+            from settings import SettingsScreen
+            
             if isinstance(self.root, ScreenManager):
                 if not self.root.has_screen("settings"):
                     s = SettingsScreen(name="settings", app_instance=self)
