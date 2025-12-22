@@ -13,6 +13,7 @@ from kivy.uix.stencilview import StencilView
 from kivy.graphics import Color, Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop, RoundedRectangle, Rectangle
 from kivy.metrics import dp, sp
 import requests
+import json
 from kivy.uix.screenmanager import ScreenManager, Screen
 
 
@@ -23,42 +24,79 @@ headers = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
 }
-YUZE_ID = "249b83b2-8e94-41d9-9d07-c6d62d47e0bf"
 
-def get_received_requests(user_id):
+def load_current_user_mail():
+    """users.jsonからログイン中のメールアドレスを取得"""
+    try:
+        with open('users.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if data and len(data) > 0:
+                user_mail = data[0].get('user_mail')
+                print(f"✅ ログイン中のメール: {user_mail}")
+                return user_mail
+    except Exception as e:
+        print(f"❌ load_current_user_mail error: {e}")
+    return None
+
+
+def get_received_requests(user_mail):
+    """ログインユーザー宛の未承認申請を取得（user_mailベース）"""
+    if not user_mail:
+        return []
+    
+    print(f"🔍 未承認申請を検索中... recive_user={user_mail}")
+    
     url = f"{SUPABASE_URL}/rest/v1/friend"
     params = {
-        "select": "send_user,friend_id",
-        "recive_user": f"eq.{user_id}",   # yuzeが受け取った申請
-        "permission": "eq.false"          # 未承認のみ
+        "select": "send_user,friend_id,permission",
+        "recive_user": f"eq.{user_mail}",
+        "permission": "is.null"  # permissionがnullのもののみ
     }
-    res = requests.get(url, headers=headers, params=params)
+    
+    print(f"   URL: {url}")
+    print(f"   Params: {params}")
+    
+    res = requests.get(url, headers=headers, params=params, timeout=10)
+    
+    print(f"📡 応答: status={res.status_code}")
+    print(f"   Response: {res.text}")
+    
     if res.status_code != 200:
-        raise Exception(f"Supabase Error {res.status_code}: {res.text}")
-    return res.json()
+        print(f"❌ Supabase friend fetch error {res.status_code}: {res.text}")
+        return []
+    
+    result = res.json()
+    print(f"✅ 取得した申請: {result}")
+    return result
 
-def get_user_info(user_id):
+
+def get_user_info_by_mail(user_mail):
+    """user_mailからユーザー情報を取得"""
+    if not user_mail:
+        return None
+    
+    print(f"🔍 ユーザー情報取得中... user_mail={user_mail}")
+    
     url = f"{SUPABASE_URL}/rest/v1/users"
     params = {
-        "select": "user_name,icon_url",
-        "user_id": f"eq.{user_id}"
+        "select": "user_name,icon_url,user_id",
+        "user_mail": f"eq.{user_mail}"
     }
-    res = requests.get(url, headers=headers, params=params)
+    
+    res = requests.get(url, headers=headers, params=params, timeout=10)
+    
+    print(f"📡 応答: status={res.status_code}")
+    print(f"   Response: {res.text}")
+    
     if res.status_code != 200:
-        raise Exception(f"Supabase Error {res.status_code}: {res.text}")
-    return res.json()[0]
+        print(f"❌ Supabase user fetch error {res.status_code}: {res.text}")
+        return None
+    
+    result = res.json()
+    user_info = result[0] if result else None
+    print(f"✅ ユーザー情報: {user_info}")
+    return user_info
 
-# 🔽 yuzeに届いた申請者の情報をまとめる
-pending = get_received_requests(YUZE_ID)
-
-data = []
-for req in pending:
-    sender_id = req["send_user"]   # 申請者のID
-    sender_info = get_user_info(sender_id)
-    data.append({
-        "user_name": sender_info["user_name"],
-        "icon_url": sender_info["icon_url"]
-    })
     
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 Window.clearcolor = (236/255, 244/255, 232/255, 1)
@@ -94,8 +132,8 @@ class CircleImageView(StencilView):
 # 角丸ボタン
 class RoundedButton(Button):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
         bg_color = kwargs.pop("background_color", (0.671, 0.906, 0.510, 1))
+        super().__init__(**kwargs)
         self.background_normal = ""
         self.background_color = (0, 0, 0, 0)
         with self.canvas.before:
@@ -109,8 +147,12 @@ class RoundedButton(Button):
 
 # FriendItem（1行）
 class FriendItem(BoxLayout):
-    def __init__(self, name, img_src, **kwargs):
+    def __init__(self, name, img_src, friend_id, sender_mail, parent_screen, **kwargs):
         super().__init__(**kwargs)
+        self.friend_id = friend_id
+        self.sender_mail = sender_mail
+        self.parent_screen = parent_screen
+        
         self.size_hint_y = None
         self.height = Sdp(140)
         self.padding = (Sdp(15), Sdp(20))
@@ -129,7 +171,8 @@ class FriendItem(BoxLayout):
         )
         name_label.bind(size=name_label.setter("text_size"))
 
-        add_btn = RoundedButton(
+        # 追加ボタン
+        self.add_btn = RoundedButton(
             text="追加",
             font_name="Japanese",
             size_hint=(None, None),
@@ -137,7 +180,12 @@ class FriendItem(BoxLayout):
             font_size=Ssp(22),
             color=(0,0,0,1),
         )
-        del_btn = RoundedButton(
+        self.add_btn_original_color = (0.671, 0.906, 0.510, 1)
+        self.add_btn.bind(on_press=self.on_add_press)
+        self.add_btn.bind(on_release=self.on_accept)
+        
+        # 削除ボタン
+        self.del_btn = RoundedButton(
             text="削除",
             font_name="Japanese",
             size_hint=(None, None),
@@ -146,11 +194,14 @@ class FriendItem(BoxLayout):
             color=(0,0,0,1),
             background_color=(0.537, 0.721, 0.82, 1),
         )
+        self.del_btn_original_color = (0.537, 0.721, 0.82, 1)
+        self.del_btn.bind(on_press=self.on_del_press)
+        self.del_btn.bind(on_release=self.on_reject)
 
         self.add_widget(icon)
         self.add_widget(name_label)
-        self.add_widget(add_btn)
-        self.add_widget(del_btn)
+        self.add_widget(self.add_btn)
+        self.add_widget(self.del_btn)
 
         with self.canvas.after:
             Color(0.8, 0.8, 0.8, 1)
@@ -161,13 +212,126 @@ class FriendItem(BoxLayout):
         vertical_padding = Sdp(5)
         self.border.pos = (self.x, self.y + vertical_padding)
         self.border.size = (self.width, Sdp(3))
+    
+    def on_add_press(self, instance):
+        """追加ボタンが押された瞬間のフィードバック（少し暗くする）"""
+        instance.bg_color_instruction.rgba = (0.55, 0.78, 0.46, 1)
+        instance.opacity = 0.85
+        print("🟢 追加ボタン押下（色変更）")
+    
+    def on_del_press(self, instance):
+        """削除ボタンが押された瞬間のフィードバック（少し暗くする）"""
+        instance.bg_color_instruction.rgba = (0.42, 0.58, 0.68, 1)
+        instance.opacity = 0.85
+        print("🔵 削除ボタン押下（色変更）")
+    
+    def on_accept(self, instance):
+        """承認ボタンが離された時（permission=true）"""
+        print(f"✅ 承認ボタン押下: friend_id={self.friend_id}")
+        
+        # ボタンを無効化（連打防止）
+        self.add_btn.disabled = True
+        self.del_btn.disabled = True
+        # ルックを元に戻す
+        instance.bg_color_instruction.rgba = self.add_btn_original_color
+        instance.opacity = 1
+        
+        # 即座にUIから削除（API呼び出し前）
+        self.parent_screen.list_layout.remove_widget(self)
+        self.parent_screen.list_layout.do_layout()
+        self.parent_screen.list_layout.canvas.ask_update()
+        print("🗑️ UIから即座に削除しました")
+        
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/friend"
+            params = {"friend_id": f"eq.{self.friend_id}"}
+            data = {"permission": True}
+            
+            print(f"   URL: {url}")
+            print(f"   Params: {params}")
+            print(f"   Data: {data}")
+            
+            res = requests.patch(url, headers=headers, params=params, json=data, timeout=10)
+            
+            print(f"📡 承認応答: status={res.status_code}")
+            print(f"   Response: {res.text}")
+            
+            if res.status_code == 200:
+                print("✅ 承認成功（permission=true）")
+            else:
+                print(f"❌ 承認失敗: {res.status_code}")
+                # 失敗したら元に戻す
+                self.parent_screen.list_layout.add_widget(self)
+                instance.bg_color_instruction.rgba = self.add_btn_original_color
+                self.add_btn.disabled = False
+                self.del_btn.disabled = False
+        except Exception as e:
+            print(f"❌ 承認エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            # エラー時も元に戻す
+            self.parent_screen.list_layout.add_widget(self)
+            instance.bg_color_instruction.rgba = self.add_btn_original_color
+            self.add_btn.disabled = False
+            self.del_btn.disabled = False
+    
+    def on_reject(self, instance):
+        """拒否ボタンが離された時（permission=false）"""
+        print(f"🗑️ 拒否ボタン押下: friend_id={self.friend_id}")
+        
+        # ボタンを無効化（連打防止）
+        self.add_btn.disabled = True
+        self.del_btn.disabled = True
+        # ルックを元に戻す
+        instance.bg_color_instruction.rgba = self.del_btn_original_color
+        instance.opacity = 1
+        
+        # 即座にUIから削除（API呼び出し前）
+        self.parent_screen.list_layout.remove_widget(self)
+        self.parent_screen.list_layout.do_layout()
+        self.parent_screen.list_layout.canvas.ask_update()
+        print("🗑️ UIから即座に削除しました")
+        
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/friend"
+            params = {"friend_id": f"eq.{self.friend_id}"}
+            data = {"permission": False}
+            
+            print(f"   URL: {url}")
+            print(f"   Params: {params}")
+            print(f"   Data: {data}")
+            
+            res = requests.patch(url, headers=headers, params=params, json=data, timeout=10)
+            
+            print(f"📡 拒否応答: status={res.status_code}")
+            print(f"   Response: {res.text}")
+            
+            if res.status_code == 200:
+                print("✅ 拒否成功（permission=false）")
+            else:
+                print(f"❌ 拒否失敗: {res.status_code}")
+                # 失敗したら元に戻す
+                self.parent_screen.list_layout.add_widget(self)
+                instance.bg_color_instruction.rgba = self.del_btn_original_color
+                self.add_btn.disabled = False
+                self.del_btn.disabled = False
+        except Exception as e:
+            print(f"❌ 拒否エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            # エラー時も元に戻す
+            self.parent_screen.list_layout.add_widget(self)
+            instance.bg_color_instruction.rgba = self.del_btn_original_color
+            self.add_btn.disabled = False
+            self.del_btn.disabled = False
 
 # メイン画面
 class FriendRequestScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        root_layout = BoxLayout(orientation="vertical", spacing=Sdp(20), padding=Sdp(10))
+        self.current_user_mail = load_current_user_mail()
+        self.root_layout = BoxLayout(orientation="vertical", spacing=Sdp(20), padding=Sdp(10))
 
         header = Label(
             text="フレンドリクエスト",
@@ -177,32 +341,89 @@ class FriendRequestScreen(Screen):
             font_name="Japanese",
             color=(0, 0, 0, 1),
         )
-        root_layout.add_widget(header)
+        self.root_layout.add_widget(header)
 
-        scroll = ScrollView(size_hint=(1, 1))
-
-        list_layout = BoxLayout(
+        self.scroll = ScrollView(size_hint=(1, 1))
+        self.list_layout = BoxLayout(
             orientation="vertical",
             size_hint_y=None,
             spacing=Sdp(20),
             padding=Sdp(20)
         )
-        list_layout.bind(minimum_height=list_layout.setter("height"))
+        self.list_layout.bind(minimum_height=self.list_layout.setter("height"))
 
-        for row in data:
-            list_layout.add_widget(FriendItem(row["user_name"], row["icon_url"]))
+        self.scroll.add_widget(self.list_layout)
+        self.root_layout.add_widget(self.scroll)
 
-        scroll.add_widget(list_layout)
-        root_layout.add_widget(scroll)
+        self.add_widget(self.root_layout)
+
+        # 最初の描画
+        self.refresh_requests()
+
+    def refresh_requests(self):
+        """申請リストを再読み込み"""
+        print("\n🔄 申請リストをリフレッシュ中...")
+        self.list_layout.clear_widgets()
+
+        if not self.current_user_mail:
+            msg = Label(
+                text="ログイン情報が見つかりません\n先にログインしてください",
+                font_name="Japanese",
+                font_size=Ssp(18),
+                color=(0, 0, 0, 1),
+                size_hint_y=None,
+                height=Sdp(80),
+            )
+            self.list_layout.add_widget(msg)
+            return
+
+        pending = get_received_requests(self.current_user_mail)
         
+        if not pending:
+            msg = Label(
+                text="未承認の申請はありません",
+                font_name="Japanese",
+                font_size=Ssp(18),
+                color=(0, 0, 0, 1),
+                size_hint_y=None,
+                height=Sdp(60),
+            )
+            self.list_layout.add_widget(msg)
+            return
 
-        # Screen に追加
-        self.add_widget(root_layout)
+        print(f"📋 {len(pending)}件の申請を表示します")
         
+        for req in pending:
+            sender_mail = req.get("send_user")
+            friend_id = req.get("friend_id")
+            
+            print(f"   - sender_mail={sender_mail}, friend_id={friend_id}")
+            
+            sender_info = get_user_info_by_mail(sender_mail)
+            
+            if sender_info:
+                name = sender_info.get("user_name", "不明")
+                icon_url = sender_info.get("icon_url", "")
+                
+                print(f"     ✅ 表示: {name}")
+                
+                self.list_layout.add_widget(
+                    FriendItem(
+                        name=name,
+                        img_src=icon_url,
+                        friend_id=friend_id,
+                        sender_mail=sender_mail,
+                        parent_screen=self
+                    )
+                )
+            else:
+                print(f"     ⚠️ ユーザー情報が取得できませんでした")
 
     def on_enter(self):
-        """画面表示時にキーボードイベントをバインド"""
+        """画面表示時にキーボードイベントをバインド & リフレッシュ"""
         Window.bind(on_keyboard=self.on_back_button)
+        # 画面に戻ってきたときは常に最新データを表示
+        self.refresh_requests()
     
     def on_leave(self):
         """画面離脱時にキーボードイベントをアンバインド"""

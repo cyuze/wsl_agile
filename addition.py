@@ -65,7 +65,7 @@ class LayeredTextInput(FloatLayout):
         if self.parent_app.search_scheduled:
             self.parent_app.search_scheduled.cancel()
         self.parent_app.search_scheduled = Clock.schedule_once(
-            lambda dt: self.parent_app.search_user(), 0.5
+            lambda dt: self.parent_app.search_user(), 0.2
         )
 
     def update_bg(self, *args):
@@ -283,6 +283,13 @@ class UserInfoRow(BoxLayout):
     def set_username(self, username, user_id=None):
         self.name_label.text = username
         self.found_user_id = user_id
+        # 自分のIDと同じ場合は送信ボタンを無効化
+        if user_id and self.parent_app.current_user_id and user_id == self.parent_app.current_user_id:
+            self.send_btn.disabled = True
+            self.send_btn.opacity = 0.5
+        else:
+            self.send_btn.disabled = False
+            self.send_btn.opacity = 1.0
 
     def update_bg(self, *args):
         self.bg_rect.pos = self.pos
@@ -308,20 +315,42 @@ class FriendApp(BoxLayout):
         
         # ログイン情報を読み込む
         self.current_user_id = self.load_current_user_id()
+        print(f"🔍 FriendApp init完了: current_user_id={self.current_user_id}")
         
     def load_current_user_id(self):
-        """users.jsonからログイン情報を読み込む"""
+        """users.jsonからメールアドレスを読み込み、Supabaseからuser_idを取得"""
         try:
             with open('users.json', 'r', encoding='utf-8') as f:
                 data = json.load(f)
+                print(f"📂 users.json読み込み: {data}")
                 if data and len(data) > 0:
                     user_mail = data[0].get('user_mail')
-                    user_pw = data[0].get('user_pw')
                     
-                    print(f"✅ ログインユーザー - メール: {user_mail}, パスワード: {user_pw}")
+                    if user_mail:
+                        print(f"🔍 Supabaseから user_id を検索中... user_mail={user_mail}")
+                        # Supabaseからuser_idを取得
+                        url = f"{SUPABASE_URL}/rest/v1/users"
+                        params = {"select": "user_id", "user_mail": f"eq.{user_mail}"}
+                        res = requests.get(url, headers=headers, params=params, timeout=10)
+                        
+                        print(f"📡 Supabase応答: status={res.status_code}, body={res.text}")
+                        
+                        if res.status_code == 200:
+                            result = res.json()
+                            if result and len(result) > 0:
+                                user_id = result[0].get('user_id')
+                                print(f"✅ ログインユーザー - メール: {user_mail}, ID: {user_id}")
+                                return user_id
+                            else:
+                                print(f"❌ ユーザーが見つかりません")
+                        else:
+                            print(f"❌ ユーザー取得エラー: {res.status_code}")
                     
         except (FileNotFoundError, json.JSONDecodeError, Exception) as e:
             print(f"❌ ログイン情報読み込みエラー: {e}")
+        
+        print(f"⚠️ current_user_id=None で初期化")
+        return None
         
     def on_back_button(self, window, key, *args):
         """Androidの戻るボタン処理"""
@@ -407,11 +436,11 @@ class FriendApp(BoxLayout):
             self.user_info.set_username("エラー")
 
     def send_request(self, instance):
-        # 検索で見つかったユーザーIDを使用
+        """フレンド申請を送信（user_mailベースに修正）"""
         friend_id = self.user_info.found_user_id
-        
-        # ログイン中のユーザーIDを使用
         my_id = self.current_user_id
+        
+        print(f"🔍 送信開始: my_id={my_id}, friend_id={friend_id}")
         
         if not my_id:
             self.show_popup("ログイン情報が見つかりません")
@@ -420,26 +449,115 @@ class FriendApp(BoxLayout):
         if not friend_id:
             self.show_popup("ユーザーを検索してください")
             return
-            
+        
+        if my_id == friend_id:
+            self.show_popup("自分自身にはフレンド申請を送信できません")
+            return
+        
         try:
-            url = f"{SUPABASE_URL}/rest/v1/friend"
-            data = {
-                "send_user": my_id,
-                "recive_user": friend_id,
-                "permission": False
-            }
-            res = requests.post(url, headers=headers, json=data, timeout=10)
+            # ✅ STEP1: user_idからuser_mailを取得（自分）
+            my_mail = None
+            url = f"{SUPABASE_URL}/rest/v1/users"
+            params = {"select": "user_mail", "user_id": f"eq.{my_id}"}
+            res = requests.get(url, headers=headers, params=params, timeout=10)
             
-            if res.status_code in [200, 201]:
+            if res.status_code == 200:
+                data = res.json()
+                if data and len(data) > 0:
+                    my_mail = data[0].get('user_mail')
+                    print(f"✅ 自分のメール: {my_mail}")
+            
+            if not my_mail:
+                self.show_popup("ログイン情報の取得に失敗しました")
+                return
+            
+            # ✅ STEP2: user_idからuser_mailを取得（相手）
+            friend_mail = None
+            params = {"select": "user_mail", "user_id": f"eq.{friend_id}"}
+            res = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if res.status_code == 200:
+                data = res.json()
+                if data and len(data) > 0:
+                    friend_mail = data[0].get('user_mail')
+                    print(f"✅ 相手のメール: {friend_mail}")
+            
+            if not friend_mail:
+                self.show_popup("相手の情報取得に失敗しました")
+                return
+            
+            # ✅ STEP3: 既存の申請をチェック（user_mailベース）
+            check_url = f"{SUPABASE_URL}/rest/v1/friend"
+            check_params = {
+                "select": "friend_id,send_user,recive_user,permission",
+                "or": f"(and(send_user.eq.{my_mail},recive_user.eq.{friend_mail}),and(send_user.eq.{friend_mail},recive_user.eq.{my_mail}))"
+            }
+            
+            print(f"🔍 既存申請チェック中...")
+            print(f"   Params: {check_params}")
+            
+            check_res = requests.get(check_url, headers=headers, params=check_params, timeout=10)
+            print(f"📡 チェック応答: status={check_res.status_code}")
+            print(f"   Response: {check_res.text}")
+            
+            if check_res.status_code == 200:
+                existing = check_res.json()
+                print(f"✅ 既存データ: {existing}")
+                
+                if existing and len(existing) > 0:
+                    record = existing[0]
+                    permission = record.get('permission')
+                    send_user = record.get('send_user')
+                    
+                    print(f"⚠️ 既存申請あり: send={send_user}, permission={permission}")
+                    
+                    if permission is True:
+                        self.show_popup("既にフレンドです")
+                    elif permission is False:
+                        self.show_popup("申請が拒否されています")
+                    elif permission is None:
+                        if send_user == my_mail:
+                            self.show_popup("既にフレンド申請を送信済みです")
+                        else:
+                            self.show_popup("相手からの申請が届いています\nフレンド承認画面で確認してください")
+                    return
+                else:
+                    print("✅ 既存申請なし。新規送信へ")
+            
+            # ✅ STEP4: 新規申請を送信（user_mailを使用）
+            print(f"📤 新規申請送信中...")
+            send_url = f"{SUPABASE_URL}/rest/v1/friend"
+            data = {
+                "send_user": my_mail,
+                "recive_user": friend_mail,
+                "permission": None
+            }
+            
+            print(f"   URL: {send_url}")
+            print(f"   Data: {data}")
+            
+            send_res = requests.post(send_url, headers=headers, json=data, timeout=10)
+            
+            print(f"📡 送信応答: status={send_res.status_code}")
+            print(f"   Response: {send_res.text}")
+            
+            if send_res.status_code in [200, 201]:
+                print("✅ 申請送信成功")
                 self.show_popup("申請を送信しました")
                 self.id_input.text_input.text = ""
                 self.user_info.set_username("")
             else:
-                self.show_popup(f"送信エラー: {res.status_code}")
+                error_detail = send_res.text if send_res.text else f"ステータス: {send_res.status_code}"
+                print(f"❌ 送信失敗: {error_detail}")
+                self.show_popup(f"送信エラー: {send_res.status_code}")
+                    
         except requests.exceptions.Timeout:
+            print("❌ タイムアウト")
             self.show_popup("タイムアウトしました")
         except Exception as e:
-            print(f"送信エラー: {e}")
+            print(f"❌ 送信エラー: {e}")
+            import traceback
+            traceback.print_exc()
             self.show_popup("送信に失敗しました")
 
     def show_popup(self, message):
