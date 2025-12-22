@@ -115,9 +115,7 @@ class SettingsScreen(Screen):
         super().__init__(**kwargs)
         
         # ユーザー情報を読み込む
-        load_user_info()
-        
-        self.current_user = {"user_name": "yuze"}  # ← 本来はログイン時にセット
+        # load_user_info()
         
         Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
 
