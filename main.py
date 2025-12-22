@@ -25,6 +25,7 @@ from map import MainScreen
 from settings import SettingsScreen
 import requests
 import json
+import hashlib
 
 
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
@@ -210,9 +211,11 @@ class LoginForm(BoxLayout):
                 "Authorization": f"Bearer {SUPABASE_KEY}",
                 "Content-Type": "application/json",
             }
+            # パスワードをハッシュ化してSupabaseと照合（Supabaseにはハッシュ値が保存されている）
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
             params = {
                 "user_mail": f"eq.{email}",
-                "user_pw": f"eq.{password}"
+                "user_pw": f"eq.{hashed_password}"
             }
 
             response = requests.get(url, headers=headers, params=params)
@@ -240,10 +243,12 @@ class LoginForm(BoxLayout):
 
 
     def save_login_info(self, email, password):
-        """ログイン情報をJSONファイルに保存"""
+        """ログイン情報をJSONファイルに保存（パスワードはハッシュ化）"""
+        # パスワードをSHA-256でハッシュ化
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
         login_data = {
             "user_mail": email,
-            "user_pw": password
+            "user_pw": hashed_password
         }
         try:
             with open('users.json', 'w', encoding='utf-8') as f:
@@ -472,9 +477,10 @@ class WaitingApp(App):
                 pic_screen = PictureScreen(name="picture")
                 self.root.add_widget(pic_screen)
 
-            # 呼び出し元を記録
+            # 呼び出し元を記録（必ず設定）
             pic_screen = self.root.get_screen("picture")
             pic_screen.caller = caller
+            print(f"open_picture: caller={caller} を設定しました")
 
             # 画面遷移
             self.root.current = "picture"
