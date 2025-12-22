@@ -12,7 +12,15 @@ from kivy.core.window import Window
 from kivy.core.text import LabelBase
 from kivy.uix.widget import Widget
 from kivy.uix.stencilview import StencilView
-from kivy.graphics import Color, Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop, RoundedRectangle
+from kivy.graphics import (
+    Color,
+    Ellipse,
+    StencilPush,
+    StencilUse,
+    StencilUnUse,
+    StencilPop,
+    RoundedRectangle,
+)
 from kivy.metrics import dp, sp
 import requests
 from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
@@ -20,22 +28,13 @@ from kivy.uix.scrollview import ScrollView
 from picture import PictureScreen
 
 
-
-SUPABASE_URL = 'https://impklpvfmyvydnoayhfj.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4'
+SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
 
 headers = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
 }
-
-# JSON読み込み
-json_path = os.path.join(os.path.dirname(__file__), "users.json")
-with open(json_path, "r", encoding="utf-8") as f:
-    users = json.load(f)
-
-# 先頭ユーザのメールを取得
-user_mail = users[0]["user_mail"]
 
 
 def get_user_by_mail(user_mail: str):
@@ -49,24 +48,20 @@ def get_user_by_mail(user_mail: str):
         return None
     return data[0]
 
-row = get_user_by_mail(user_mail)
-if row is None:
-    # デフォルト値を設定（ユーザーが見つからない場合）
-    user_name = "ゲストユーザー"
-    img_url = "img/cat_placeholder.png"  # デフォルト画像
-    print(f"警告: メール '{user_mail}' のユーザーが見つかりませんでした。デフォルト値を使用します。")
-else:
-    user_name = row["user_name"]
-    img_url = row["icon_url"]
-
-
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
 Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
 
 # === スケーリング関数 ===
-scale = Window.dpi / 160.0   # 160dpiを基準に拡大
-def Sdp(value): return dp(value * scale)
-def Ssp(value): return sp(value * scale)
+scale = Window.dpi / 160.0  # 160dpiを基準に拡大
+
+
+def Sdp(value):
+    return dp(value * scale)
+
+
+def Ssp(value):
+    return sp(value * scale)
+
 
 # 丸アイコン
 class CircleImageView(StencilView):
@@ -82,7 +77,7 @@ class CircleImageView(StencilView):
             allow_stretch=True,
             keep_ratio=False,
             size_hint=(None, None),
-            size=self.size
+            size=self.size,
         )
         self.add_widget(self.img)
         with self.canvas.after:
@@ -96,11 +91,12 @@ class CircleImageView(StencilView):
         self.img.pos = self.pos
         self.img.size = self.size
 
+
 # 角丸ボタン
 class RoundedButton(Button):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.background_normal = ''
+        self.background_normal = ""
         self.background_color = (0, 0, 0, 0)
         with self.canvas.before:
             Color(rgba=(0.671, 0.906, 0.510, 1))
@@ -111,18 +107,69 @@ class RoundedButton(Button):
         self.rect.pos = self.pos
         self.rect.size = self.size
 
+
 # 設定画面
 # class SettingsScreen(BoxLayout, Screen):
 class SettingsScreen(Screen):
     def __init__(self, app_instance=None, **kwargs):
         super().__init__(**kwargs)
-        
-        # ユーザー情報を読み込む
-        # load_user_info()
-        
+        self.app_instance = app_instance
+
+        # 初期値
+        self.user_name = ""
+        self.img_url = ""
+
+        # UI構築
+        self.build_ui()
+
+    def on_pre_enter(self):
+        """画面に入るたびに最新の users.json を読み込む"""
+        self.load_user_info()
+
+    def load_user_info(self):
+        """users.json を安全に読み込み、Supabase から最新情報を取得して UI を更新"""
+        try:
+            json_path = os.path.join(os.path.dirname(__file__), "users.json")
+
+            # ファイルが存在しない場合は自動生成
+            if not os.path.exists(json_path):
+                print("users.json が存在しません → 初期ファイルを作成します")
+                default_data = [{
+                    "user_mail": "guest",
+                    "user_pw": ""
+                }]
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json.dump(default_data, f, ensure_ascii=False, indent=2)
+
+            # JSON 読み込み
+            with open(json_path, "r", encoding="utf-8") as f:
+                users = json.load(f)
+
+            user_mail = users[0].get("user_mail", "guest")
+
+            # Supabase からユーザー情報取得
+            row = get_user_by_mail(user_mail)
+            if row:
+                self.user_name = row["user_name"]
+                self.img_url = row["icon_url"]
+            else:
+                self.user_name = "ゲストユーザー"
+                self.img_url = "img/cat_placeholder.png"
+
+            # UI 更新
+            self.name_label.text = self.user_name
+            self.profile_icon.img.source = self.img_url
+            self.profile_icon.img.reload()
+
+        except Exception as e:
+            print("設定画面のユーザー情報更新エラー:", e)
+
+
+
+    def build_ui(self):
+        # ... 既存のUI構築コード ...
         Window.clearcolor = (236 / 255, 244 / 255, 232 / 255, 1)
 
-        self.app_instance = app_instance
         Window.bind(on_keyboard=self.on_back_button)
 
         # 全体を縦に並べるレイアウト
@@ -138,11 +185,11 @@ class SettingsScreen(Screen):
                 size_hint_y=None,
                 font_size=Ssp(28),
                 height=Sdp(40),
-                **kw
+                **kw,
             )
             lbl.bind(size=lambda s, _: setattr(s, "text_size", s.size))
             return lbl
-        
+
         def header_label(text, **kw):
             hlbl = Label(
                 text=text,
@@ -153,12 +200,12 @@ class SettingsScreen(Screen):
                 size_hint_y=None,
                 font_size=Ssp(40),
                 height=Sdp(80),
-                **kw
+                **kw,
             )
             hlbl.bind(size=lambda s, _: setattr(s, "text_size", s.size))
             return hlbl
 
-        # === 固定ヘッダー部分 ===
+            # === 固定ヘッダー部分 ===
         header = header_label("設定")
         main_layout.add_widget(header)
 
@@ -169,7 +216,7 @@ class SettingsScreen(Screen):
             orientation="vertical",
             padding=[Sdp(30), Sdp(20), Sdp(30), Sdp(20)],
             spacing=Sdp(50),
-            size_hint_y=None
+            size_hint_y=None,
         )
         root_layout.bind(minimum_height=root_layout.setter("height"))
 
@@ -181,41 +228,40 @@ class SettingsScreen(Screen):
             orientation="horizontal",
             spacing=Sdp(100),
             size_hint_y=None,
-            height=Sdp(160)
+            height=Sdp(160),
         )
         profile_layout.add_widget(Widget(size_hint_x=0.3))
+        
         self.profile_icon = CircleImageView(
-            source=img_url,
+            source=self.img_url,
             size_hint=(None, None),
             size=(Sdp(120), Sdp(120))
         )
+
         profile_layout.add_widget(self.profile_icon)
-        name_label = Label(
-            text=user_name,
+        self.name_label = Label(
+            text=self.user_name,
             font_size=Ssp(32),
             color=(0, 0, 0, 1),
             font_name="Japanese",
             size_hint=(None, None),
-            height=Sdp(80)
+            height=Sdp(80),
         )
-        profile_layout.add_widget(name_label)
+
+        profile_layout.add_widget(self.name_label)
         profile_layout.add_widget(Widget(size_hint_x=1))
         root_layout.add_widget(profile_layout)
 
-
         # 編集ボタン
         edit_layout = AnchorLayout(
-            anchor_x="center",
-            anchor_y="bottom",
-            size_hint_y=None,
-            height=Sdp(80)
+            anchor_x="center", anchor_y="bottom", size_hint_y=None, height=Sdp(80)
         )
         inner_layout = BoxLayout(
             orientation="horizontal",
             spacing=Sdp(60),
             size_hint=(None, None),
             width=Sdp(360),
-            height=Sdp(80)
+            height=Sdp(80),
         )
         edit_button1 = RoundedButton(
             text="編集",
@@ -224,7 +270,7 @@ class SettingsScreen(Screen):
             size=(Sdp(140), Sdp(70)),
             font_name="Japanese",
             font_size=Ssp(24),
-            on_press=self.on_imgEdit_press
+            on_press=self.on_imgEdit_press,
         )
         edit_button2 = RoundedButton(
             text="編集",
@@ -233,7 +279,7 @@ class SettingsScreen(Screen):
             size=(Sdp(140), Sdp(70)),
             font_name="Japanese",
             font_size=Ssp(24),
-            on_press=self.on_nameEdit_press
+            on_press=self.on_nameEdit_press,
         )
         inner_layout.add_widget(edit_button1)
         inner_layout.add_widget(edit_button2)
@@ -243,10 +289,7 @@ class SettingsScreen(Screen):
         # 通知
         root_layout.add_widget(left_label("通知"))
         notif_layout = GridLayout(
-            cols=2,
-            spacing=Sdp(20),
-            size_hint_y=None,
-            height=Sdp(160)
+            cols=2, spacing=Sdp(20), size_hint_y=None, height=Sdp(160)
         )
         notif_layout.add_widget(left_label("位置情報関係"))
         notif_layout.add_widget(Switch(active=True))
@@ -257,34 +300,35 @@ class SettingsScreen(Screen):
         # プライバシー
         root_layout.add_widget(left_label("プライバシー"))
         privacy_layout = GridLayout(
-            cols=2,
-            spacing=Sdp(20),
-            size_hint_y=None,
-            height=Sdp(80)
+            cols=2, spacing=Sdp(20), size_hint_y=None, height=Sdp(80)
         )
         privacy_layout.add_widget(left_label("位置情報の表示"))
         privacy_layout.add_widget(Switch(active=True))
         root_layout.add_widget(privacy_layout)
-        
+
         # 確定
-        root_layout.add_widget(RoundedButton(
-            text="確定",
-            color=(0,0,0,1),
-            size_hint_y=None,
-            height=Sdp(70),
-            font_name="Japanese",
-            font_size=Ssp(24),
-            on_press=self.on_submit_press
-        ))
-        root_layout.add_widget(RoundedButton(
-            text="ログアウト",
-            color=(0,0,0,1),
-            size_hint_y=None,
-            height=Sdp(70),
-            font_name="Japanese",
-            font_size=Ssp(24),
-            on_press=self.on_logout_press
-        ))
+        root_layout.add_widget(
+            RoundedButton(
+                text="確定",
+                color=(0, 0, 0, 1),
+                size_hint_y=None,
+                height=Sdp(70),
+                font_name="Japanese",
+                font_size=Ssp(24),
+                on_press=self.on_submit_press,
+            )
+        )
+        root_layout.add_widget(
+            RoundedButton(
+                text="ログアウト",
+                color=(0, 0, 0, 1),
+                size_hint_y=None,
+                height=Sdp(70),
+                font_name="Japanese",
+                font_size=Ssp(24),
+                on_press=self.on_logout_press,
+            )
+        )
 
         # ScrollView にスクロール対象を追加
         scroll.add_widget(root_layout)
@@ -295,13 +339,11 @@ class SettingsScreen(Screen):
         # Screen に追加
         self.add_widget(main_layout)
 
-
     # イベントハンドラ
     def on_imgEdit_press(self, instance):
         print("画像編集ボタンが押されました。編集画面に遷移します。")
         if self.app_instance:
             self.app_instance.open_picture(caller="settings")
-
 
     def on_nameEdit_press(self, instance):
         print("名前編集ボタンが押されました。編集画面に遷移します。")
@@ -309,10 +351,10 @@ class SettingsScreen(Screen):
     def on_logout_press(self, instance):
         print("ログアウトボタンが押されました。ログイン画面に遷移します。")
         self.manager.current = "friend_profile"
-        
+
     def on_submit_press(self, instance):
         print("確定ボタンが押されました。変更内容を確定します。")
-        
+
     def update_icon_image(self, image_path):
         """設定画面のアイコン画像を更新"""
         if self.profile_icon:
@@ -321,14 +363,13 @@ class SettingsScreen(Screen):
             self.profile_icon.img.source = image_path
             self.profile_icon.img.reload()
 
-
     def update_user_icon(self, icon_path):
         """ログイン中ユーザーのアイコンを更新"""
         try:
             user_name = self.current_user["user_name"]
 
             # ファイル名を決定
-            safe_name = user_name.replace('@', '_at_').replace('.', '_')
+            safe_name = user_name.replace("@", "_at_").replace(".", "_")
             file_name = f"{safe_name}_icon.png"
 
             # 画像ファイル読み込み
@@ -341,7 +382,7 @@ class SettingsScreen(Screen):
                 "apikey": SUPABASE_KEY,
                 "Authorization": f"Bearer {SUPABASE_KEY}",
                 "Content-Type": "image/png",
-                "x-upsert": "true"
+                "x-upsert": "true",
             }
             res = requests.post(storage_url, headers=storage_headers, data=image_data)
 
@@ -368,7 +409,7 @@ class SettingsScreen(Screen):
         except Exception as e:
             print("更新失敗:", e)
             return False
-        
+
     def on_back_button(self, window, key, *args):
         if key == 27 and self.manager.current == "settings":
             print("戻るボタン: map に戻ります")
@@ -376,7 +417,6 @@ class SettingsScreen(Screen):
                 self.app_instance.back_to_map()
                 return True
         return False
-
 
 
 class SettingsApp(App):
@@ -388,8 +428,6 @@ class SettingsApp(App):
         # self.sm.add_widget(FriendRequestScreen(name="friend_request"))
 
         self.sm.current = "settings"  # 起動時は設定画面
-
-        
 
 
 if __name__ == "__main__":
