@@ -32,7 +32,9 @@ LabelBase.register(name='NotoSansJP',
 SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
 
-MY_USER_ID = "cb3cce5a-3ec7-4837-b998-fd9d5446f04a"
+# ログインユーザーのメールアドレス（main.pyから渡される）
+MY_USER_MAIL = None
+MY_USER_NAME = None
 
 # -----------------------------
 # 完全版 CircularImage(はみ出しゼロ&中央表示)
@@ -96,13 +98,13 @@ class ChatListItem(ButtonBehavior, BoxLayout):
             Color(0.925, 0.957, 0.91, 1)  # ECF4E8
             self.rect = RoundedRectangle(pos=self.pos, size=self.size)
             self.bind(pos=self._update_rect, size=self._update_rect)
-            
-            with self.canvas.after:
-                Color(0, 0, 0, 1)  # 黒
-                self.bottom_line = RoundedRectangle(
-                    pos=(self.x, self.y),      # 下側
-                    size=(self.width, 2)       # 横幅いっぱい、高さ2px
-                )
+
+        with self.canvas.after:
+            Color(0, 0, 0, 1)  # 黒
+            self.bottom_line = RoundedRectangle(
+                pos=(self.x, self.y),      # 下側
+                size=(self.width, 2)       # 横幅いっぱい、高さ2px
+            )
 
         # 位置とサイズを追従させる
         self.bind(
@@ -231,7 +233,13 @@ class ChatListItem(ButtonBehavior, BoxLayout):
             except Exception:
                 pass
 
-            self.app_instance.open_chat(MY_USER_ID, self.other_user_id)
+            # user_mailを取得してopen_chatに渡す
+            parent = self.parent
+            while parent and not isinstance(parent, MainLayout):
+                parent = parent.parent
+            
+            if parent and hasattr(parent, 'user_mail'):
+                self.app_instance.open_chat(parent.user_mail, self.other_user_id)
 
     def _update_rect(self, *args):
         self.rect.pos = self.pos
@@ -244,21 +252,20 @@ class ChatListItem(ButtonBehavior, BoxLayout):
 
 # -----------------------------
 class MainLayout(BoxLayout):
-    def __init__(self, app_instance=None, **kwargs):
+    def __init__(self, app_instance=None, user_mail=None, **kwargs):
         super().__init__(**kwargs)
+        self.user_mail = user_mail
+        self.user_name = None  # ユーザー名を保存
+        
+        # ログインユーザーの情報を取得
+        if self.user_mail:
+            self.load_user_info()
         
         # 🔥 戻るボタンのキーボードイベントをバインド
         self._keyboard_bind = Window.bind(on_keyboard=self.on_back_button)
 
-        # 親が外れたときにキーバインドを解除する
-        def _on_parent_change(instance, parent):
-            if parent is None:
-                try:
-                    Window.unbind(on_keyboard=self.on_back_button)
-                except Exception:
-                    pass
-
-        self.bind(parent=_on_parent_change)
+        # 親が外れたときにキーバインドを解除する（メソッドを後で定義）
+        self.bind(parent=self._on_parent_change)
         
         with self.canvas.before:
             Color(0.925, 0.957, 0.91, 1)  # ECF4E8
@@ -359,7 +366,37 @@ class MainLayout(BoxLayout):
                 self.app_instance.open_map_screen()
             return True  # イベントを消費
         return False
-    
+
+    def load_user_info(self):
+        """ログインユーザーの情報を取得"""
+        url = f"{SUPABASE_URL}/rest/v1/users"
+        params = {
+            "select": "user_name",
+            "user_mail": f"eq.{self.user_mail}"
+        }
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }
+
+        try:
+            res = requests.get(url, headers=headers, params=params)
+            if res.status_code == 200:
+                user_data = res.json()
+                if user_data:
+                    self.user_name = user_data[0]['user_name']
+                    print(f"✅ ログインユーザー: {self.user_name}")
+        except Exception as e:
+            print(f"❌ ユーザー情報取得エラー: {e}")
+
+    def _on_parent_change(self, instance, parent):
+        """親が外れたときにキーバインドを解除する"""
+        if parent is None:
+            try:
+                Window.unbind(on_keyboard=self.on_back_button)
+            except Exception:
+                pass
+
     def __del__(self):
         """ウィジェットが削除される時にイベントをアンバインド"""
         try:
@@ -394,10 +431,14 @@ class MainLayout(BoxLayout):
                 self.chat_list.add_widget(no_result)
 
     def load_chats(self):
+        if not self.user_name:
+            print("❌ ユーザー名が取得できていません")
+            return
+        
         url = f"{SUPABASE_URL}/rest/v1/friend"
         params = {
             "select": "send_user,recive_user,permission",
-            "or": f"(send_user.eq.{MY_USER_ID},recive_user.eq.{MY_USER_ID})",
+            "or": f"(send_user.eq.{self.user_name},recive_user.eq.{self.user_name})",
             "permission": "eq.true"
         }
         headers = {
@@ -405,8 +446,6 @@ class MainLayout(BoxLayout):
             "Authorization": f"Bearer {SUPABASE_KEY}"
         }
 
-        # 最新の既読状態ファイルを都度再読み込みして、
-        # 他画面（ChatScreen等）で更新された既読タイムスタンプを反映する
         try:
             if os.path.exists(self.state_path):
                 with open(self.state_path, 'r', encoding='utf-8') as f:
@@ -435,17 +474,17 @@ class MainLayout(BoxLayout):
             self.chat_list.add_widget(no_friend_label)
             return
 
-        friend_ids = [
-            friend['recive_user'] if friend['send_user'] == MY_USER_ID else friend['send_user']
+        friend_names = [
+            friend['recive_user'] if friend['send_user'] == self.user_name else friend['send_user']
             for friend in friends
         ]
 
         temp_items = []
-        for friend_id in friend_ids:
+        for friend_name in friend_names:
             user_url = f"{SUPABASE_URL}/rest/v1/users"
             user_params = {
                 "select": "user_name,icon_url",
-                "user_id": f"eq.{friend_id}"
+                "user_name": f"eq.{friend_name}"
             }
             
             try:
@@ -457,16 +496,15 @@ class MainLayout(BoxLayout):
                 if not user_data:
                     continue
 
-                friend_name = user_data[0]['user_name']
                 icon_url = user_data[0].get('icon_url')
             except Exception as e:
                 print(f"❌ ユーザー情報取得エラー: {e}")
-                continue
+                icon_url = None
 
             chat_url = f"{SUPABASE_URL}/rest/v1/chat"
             chat_params = {
                 "select": "*",
-                "or": f"(and(userA_id.eq.{MY_USER_ID},userB_id.eq.{friend_id}),and(userA_id.eq.{friend_id},userB_id.eq.{MY_USER_ID}))",
+                "or": f"(and(userA.eq.{self.user_name},userB.eq.{friend_name}),and(userA.eq.{friend_name},userB.eq.{self.user_name}))",
                 "order": "date.desc,time.desc",
                 "limit": "1"
             }
@@ -487,19 +525,19 @@ class MainLayout(BoxLayout):
                             last_dt = datetime.strptime(f"{d}T{t}", '%Y-%m-%dT%H:%M:%S')
                         except Exception:
                             last_dt = None
-                        last_sender = msg.get('userA_id') or msg.get('user_id') or None
+                        last_sender = msg.get('userA') or None
             except Exception as e:
                 print(f"❌ メッセージ取得エラー: {e}")
 
-            temp_items.append((friend_id, friend_name, icon_url, last_message, last_dt, last_sender))
+            temp_items.append((friend_name, icon_url, last_message, last_dt, last_sender))
 
-        temp_items.sort(key=lambda x: x[4] or datetime.min, reverse=True)
+        temp_items.sort(key=lambda x: x[3] or datetime.min, reverse=True)
 
         self.all_chat_items = []
-        for friend_id, friend_name, icon_url, last_message, last_dt, last_sender in temp_items:
+        for friend_name, icon_url, last_message, last_dt, last_sender in temp_items:
             unread_count = 0
             try:
-                saved = self.chat_state.get(friend_id)
+                saved = self.chat_state.get(friend_name)
                 if saved:
                     saved_dt = datetime.strptime(saved, '%Y-%m-%dT%H:%M:%S')
                 else:
@@ -507,8 +545,8 @@ class MainLayout(BoxLayout):
 
                 count_url = f"{SUPABASE_URL}/rest/v1/chat"
                 count_params = {
-                    "select": "date,time,userA_id",
-                    "or": f"(and(userA_id.eq.{MY_USER_ID},userB_id.eq.{friend_id}),and(userA_id.eq.{friend_id},userB_id.eq.{MY_USER_ID}))",
+                    "select": "date,time,userA",
+                    "or": f"(and(userA.eq.{self.user_name},userB.eq.{friend_name}),and(userA.eq.{friend_name},userB.eq.{self.user_name}))",
                     "order": "date.desc,time.desc",
                     "limit": "200"
                 }
@@ -523,8 +561,8 @@ class MainLayout(BoxLayout):
                                 msg_dt = datetime.strptime(f"{d}T{t}", '%Y-%m-%dT%H:%M:%S')
                             except Exception:
                                 msg_dt = None
-                            sender = m.get('userA_id') or m.get('user_id') or None
-                            if msg_dt and sender and sender != MY_USER_ID and msg_dt > saved_dt:
+                            sender = m.get('userA') or None
+                            if msg_dt and sender and sender != self.user_name and msg_dt > saved_dt:
                                 unread_count += 1
                 except Exception:
                     unread_count = 0
@@ -536,15 +574,16 @@ class MainLayout(BoxLayout):
                 last_message,
                 icon_url=icon_url,
                 unread_count=unread_count,
-                other_user_id=friend_id,
+                other_user_id=friend_name,
                 app_instance=self.app_instance
             )
             self.all_chat_items.append(chat_item)
 
         self.chat_list.clear_widgets()
         for item in self.all_chat_items:
-            self.chat_list.add_widget(item)
+            self.chat_list.add_widget(item) 
             
+                       
     def check_for_updates(self, dt):
         """定期的にチャットリストを更新"""
         try:
