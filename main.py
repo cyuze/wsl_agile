@@ -214,8 +214,6 @@ class LoginForm(BoxLayout):
                 "Authorization": f"Bearer {SUPABASE_KEY}",
                 "Content-Type": "application/json",
             }
-            # パスワードをハッシュ化してSupabaseと照合（Supabaseにはハッシュ値が保存されている）
-            hashed_password = hashlib.sha256(password.encode()).hexdigest()
             params = {
                 "user_mail": f"eq.{email}",
                 "user_pw": f"eq.{hashed_password}"
@@ -229,11 +227,14 @@ class LoginForm(BoxLayout):
 
                 if data and len(data) > 0:
                     user = data[0]
-                    # ハッシュ値をJSONに保存
+                    
+                    # ✅ 先にJSONを保存（マップ遷移前に必ず実行）
                     self.save_login_info(email, hashed_password)
+                    print("✅ ログイン情報をusers.jsonに保存しました")
 
                     if self.app_instance:
                         self.app_instance.current_user = user
+                        # JSONの保存が完了してからマップに遷移
                         self.app_instance.open_map_screen()
                 else:
                     self.show_popup("入力エラー")
@@ -306,11 +307,99 @@ class WaitingApp(App):
         
         # ScreenManagerを作成して保存
         self.screen_manager = ScreenManager(transition=NoTransition())
-        self.screen_manager.add_widget(LoginScreen(name="login", app_instance=self))
-        self.screen_manager.add_widget(AccountScreen(name="account"))
-        self.screen_manager.add_widget(PictureScreen(name="picture"))
+        
+        # ✅ 自動ログインチェック
+        if self.check_auto_login():
+            print("✅ 自動ログイン成功 - マップ画面へ")
+            # マップ画面を最初に表示
+            class MapScreen(Screen):
+                def __init__(self, app_inst, **kwargs):
+                    super().__init__(name="map", **kwargs)
+                    self.main_screen = MainScreen(app_instance=app_inst)
+                    self.add_widget(self.main_screen)
+            
+            map_screen = MapScreen(app_inst=self)
+            self.screen_manager.add_widget(map_screen)
+            self.screen_manager.current = "map"
+        else:
+            print("⚠️ 自動ログイン失敗 - ログイン画面へ")
+            # ログイン画面を表示
+            self.screen_manager.add_widget(LoginScreen(name="login", app_instance=self))
+            self.screen_manager.add_widget(AccountScreen(name="account"))
+            self.screen_manager.add_widget(PictureScreen(name="picture"))
+            self.screen_manager.current = "login"
         
         return self.screen_manager
+    
+    def check_auto_login(self):
+        """users.jsonが存在し、有効なログイン情報があるかチェック"""
+        try:
+            import os
+            
+            # users.jsonの存在チェック
+            if not os.path.exists('users.json'):
+                print("📂 users.json が存在しません")
+                return False
+            
+            # users.jsonを読み込み
+            with open('users.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                print(f"📂 users.json読み込み: {data}")
+            
+            if not data or len(data) == 0:
+                print("⚠️ users.jsonが空です")
+                return False
+            
+            # メールとパスワードハッシュを取得
+            user_mail = data[0].get('user_mail')
+            user_pw = data[0].get('user_pw')
+            
+            if not user_mail or not user_pw:
+                print("⚠️ ログイン情報が不完全です")
+                return False
+            
+            # Supabaseで認証確認
+            url = f"{SUPABASE_URL}/rest/v1/users"
+            headers = {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json",
+            }
+            params = {
+                "user_mail": f"eq.{user_mail}",
+                "user_pw": f"eq.{user_pw}"
+            }
+            
+            print(f"🔍 自動ログイン認証中... user_mail={user_mail}")
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                users = response.json()
+                print(f"📡 Supabase応答: {users}")
+                
+                if users and len(users) > 0:
+                    # ユーザー情報を保存
+                    self.current_user = users[0]
+                    print(f"✅ 自動ログイン成功: {self.current_user.get('user_name')}")
+                    return True
+                else:
+                    print("❌ ユーザーが見つかりません（削除済み?）")
+                    return False
+            else:
+                print(f"❌ Supabase認証エラー: {response.status_code}")
+                return False
+                
+        except FileNotFoundError:
+            print("📂 users.json が見つかりません")
+            return False
+        except json.JSONDecodeError:
+            print("❌ users.json の形式が不正です")
+            return False
+        except Exception as e:
+            print(f"❌ 自動ログインエラー: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def open_map_screen(self):
         """map画面を開く"""
@@ -332,62 +421,42 @@ class WaitingApp(App):
             self.root.add_widget(self.main_screen)
     
     def back_to_login(self):
-        """ログイン画面に戻る"""
+        """ログイン画面に戻る（ログアウト）"""
+        print("🚪 ログアウト処理開始")
+        
         self.current_user = None  # ログアウト時にユーザー情報をクリア
-        self.root.clear_widgets()
-        self.screen_manager = ScreenManager(transition=NoTransition())
+        
+        try:
+            import os
+            if os.path.exists('users.json'):
+                os.remove('users.json')
+                print("🗑️ users.json を削除しました（ログアウト）")
+        except Exception as e:
+            print(f"⚠️ users.json削除エラー: {e}")
+        
+        # ✅ 既存のすべてのスクリーンを削除（リソース解放）
+        if isinstance(self.root, ScreenManager):
+            screen_names = [screen.name for screen in self.root.screens[:]]  # コピーを作成
+            print(f"🗑️ 既存のスクリーン削除: {screen_names}")
+            for screen_name in screen_names:
+                try:
+                    screen = self.root.get_screen(screen_name)
+                    # スクリーン内の定期処理などを停止
+                    if hasattr(screen, 'on_leave'):
+                        screen.on_leave()
+                    self.root.remove_widget(screen)
+                except Exception as e:
+                    print(f"⚠️ スクリーン削除エラー ({screen_name}): {e}")
+        
+        # ✅ 新しいスクリーンを追加
         self.screen_manager.add_widget(LoginScreen(name="login", app_instance=self))
         self.screen_manager.add_widget(AccountScreen(name="account"))
         self.screen_manager.add_widget(PictureScreen(name="picture"))
-        self.root.add_widget(self.screen_manager)
-
-    # ======================================================
-    # ここから修正版(チャット機能の画面遷移)
-    # ======================================================
-
-    def open_chat_list(self):
-        """チャット一覧画面を開く"""
-        from chat_screen import MainLayout
-
-        if isinstance(self.root, ScreenManager):
-
-            # 同じ画面がないかチェック
-            if not self.root.has_screen("chat_list"):
-                
-                class ChatListScreen(Screen):
-                    def __init__(self, app_inst, **kwargs):
-                        super().__init__(name="chat_list", **kwargs)
-                        layout = MainLayout(app_instance=app_inst)
-                        self.add_widget(layout)
-                
-                new_screen = ChatListScreen(app_inst=self)
-                self.root.add_widget(new_screen)
-
-            # 画面遷移
-            self.root.current = "chat_list"
-
-
-    def open_chat(self, my_id, target_id):
-        """個別チャット画面を開く"""
-        from personal_chat_screen import ChatScreen
-
-        if isinstance(self.root, ScreenManager):
-
-            screen_name = f"chat_{my_id}_{target_id}"
-
-            if not self.root.has_screen(screen_name):
-
-                class PersonalChatScreen(Screen):
-                    def __init__(self, my_id, target_id, app_inst, **kwargs):
-                        super().__init__(name=screen_name, **kwargs)
-                        chat = ChatScreen(my_id, target_id, app_instance=app_inst)
-                        self.add_widget(chat)
-
-                new_screen = PersonalChatScreen(my_id, target_id, app_inst=self)
-                self.root.add_widget(new_screen)
-
-            # 画面遷移
-            self.root.current = screen_name
+        
+        # ログイン画面に遷移
+        self.screen_manager.current = "login"
+        
+        print("✅ ログイン画面に遷移しました")
 
 
     def back_to_list(self):

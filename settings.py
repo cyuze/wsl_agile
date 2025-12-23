@@ -349,8 +349,48 @@ class SettingsScreen(Screen):
         print("名前編集ボタンが押されました。編集画面に遷移します。")
 
     def on_logout_press(self, instance):
-        print("ログアウトボタンが押されました。ログイン画面に遷移します。")
-        self.manager.current = "friend_profile"
+        """ログアウトボタンが押された瞬間（色を暗くする）"""
+        # ボタンの色を50%暗くする
+        if hasattr(instance, 'bg_color_instruction'):
+            if not hasattr(self, 'logout_original_color'):
+                self.logout_original_color = instance.bg_color_instruction.rgba
+            
+            instance.bg_color_instruction.rgba = (
+                self.logout_original_color[0] * 0.5,
+                self.logout_original_color[1] * 0.5,
+                self.logout_original_color[2] * 0.5,
+                1
+            )
+        
+        print("🚪 ログアウトボタンが押されました")
+        
+        # 少し遅延してからログアウト処理
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.do_logout(instance), 0.2)
+
+    def do_logout(self, instance):
+        """実際のログアウト処理"""
+        try:
+            import os
+            
+            # users.jsonを削除
+            if os.path.exists('users.json'):
+                os.remove('users.json')
+                print("🗑️ users.json を削除しました（ログアウト）")
+            else:
+                print("⚠️ users.json が存在しません")
+            
+            # app_instanceのback_to_loginを呼び出す
+            if self.app_instance and hasattr(self.app_instance, 'back_to_login'):
+                print("📱 ログイン画面へ遷移します")
+                self.app_instance.back_to_login()
+            else:
+                print("❌ app_instance が見つかりません")
+        
+        except Exception as e:
+            print(f"❌ ログアウトエラー: {e}")
+            import traceback
+            traceback.print_exc()
 
     def on_submit_press(self, instance):
         print("確定ボタンが押されました。変更内容を確定します。")
