@@ -349,12 +349,16 @@ class ImageButton(ButtonBehavior, Image):
 
 # ===== チャット画面 =====
 class ChatScreen(BoxLayout):
-    def __init__(self, my_id, target_id, app_instance=None, **kwargs):
+    def __init__(self, my_user_mail, target_name, app_instance=None, **kwargs):
         super().__init__(**kwargs)
         self.orientation = 'vertical'
-        self.my_id = my_id
-        self.target_id = target_id
+        self.my_user_mail = my_user_mail
+        self.target_name = target_name
         self.app_instance = app_instance
+        self.my_name = None
+        
+        # 自分のユーザー名を取得
+        self.load_my_name()
 
         # ヘッダー(相手の名前とアイコン表示)
         header = BoxLayout(size_hint_y=None, height=140, padding=[10, 5], spacing=10)
@@ -386,7 +390,7 @@ class ChatScreen(BoxLayout):
         url = f"{SUPABASE_URL}/rest/v1/users"
         params = {
             "select": "user_name,icon_url",
-            "user_id": f"eq.{target_id}"
+            "user_name": f"eq.{self.target_name}"
         }
         headers = {
             "apikey": SUPABASE_KEY,
@@ -401,16 +405,16 @@ class ChatScreen(BoxLayout):
                     other_name = user_data[0]['user_name']
                     icon_url = user_data[0].get('icon_url')
                 else:
-                    other_name = "不明"
+                    other_name = self.target_name
                     icon_url = None
             else:
-                other_name = "不明"
+                other_name = self.target_name
                 icon_url = None
         except Exception as e:
             print(f"❌ ユーザー情報取得エラー: {e}")
-            other_name = "不明"
+            other_name = self.target_name
             icon_url = None
-        
+
         self.other_icon_url = icon_url
         
         # タイトルコンテナ(テキストのみ)
@@ -554,6 +558,34 @@ class ChatScreen(BoxLayout):
                 self.send_message(None)
                 return True
         return False
+    
+    def load_my_name(self):
+        """ログインユーザーの名前を取得"""
+        url = f"{SUPABASE_URL}/rest/v1/users"
+        params = {
+            "select": "user_name",
+            "user_mail": f"eq.{self.my_user_mail}"
+        }
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }
+        
+        try:
+            res = requests.get(url, headers=headers, params=params)
+            if res.status_code == 200:
+                user_data = res.json()
+                if user_data:
+                    self.my_name = user_data[0]['user_name']
+                    print(f"✅ 自分のユーザー名: {self.my_name}")
+                else:
+                    print(f"⚠️ ユーザーが見つかりません: {self.my_user_mail}")
+            else:
+                print(f"⚠️ ユーザー情報取得失敗: {res.status_code}")
+        except Exception as e:
+            print(f"❌ ユーザー名取得エラー: {e}")
+        
+    
 
     def go_back(self, instance):
         # 戻る時はまずキーイベントを解除してから画面遷移
@@ -562,7 +594,7 @@ class ChatScreen(BoxLayout):
         except Exception:
             pass
 
-        # チャット画面を離れる（戻る）ときは、
+        # チャット画面を離れる(戻る)ときは、
         # その会話を既読として現在時刻をチャット状態に保存する
         try:
             import os
@@ -571,7 +603,7 @@ class ChatScreen(BoxLayout):
             if os.path.exists(state_path):
                 with open(state_path, 'r', encoding='utf-8') as f:
                     state = json.load(f)
-            state[self.target_id] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            state[self.target_name] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             with open(state_path, 'w', encoding='utf-8') as f:
                 json.dump(state, f)
         except Exception as e:
@@ -623,7 +655,7 @@ class ChatScreen(BoxLayout):
     def send_message(self, instance):
         message_text = self.message_input.text.strip()
         message_text = '\n'.join([message_text[i:i+10] for i in range(0, len(message_text), 10)])
-        if not message_text:
+        if not message_text or not self.my_name:
             return
         
         try:
@@ -640,8 +672,8 @@ class ChatScreen(BoxLayout):
             }
             
             data = {
-                'userA_id': self.my_id,
-                'userB_id': self.target_id,
+                'userA': self.my_name,
+                'userB': self.target_name,
                 'log': message_text,
                 'date': current_date,
                 'time': current_time
@@ -688,11 +720,15 @@ class ChatScreen(BoxLayout):
             traceback.print_exc()
 
     def load_messages(self, scroll_to_bottom=True):
+        if not self.my_name:
+            print("❌ 自分のユーザー名が取得できていません")
+            return
+            
         try:
             url = f"{SUPABASE_URL}/rest/v1/chat"
             params = {
                 "select": "*",
-                "or": f"(and(userA_id.eq.{self.my_id},userB_id.eq.{self.target_id}),and(userA_id.eq.{self.target_id},userB_id.eq.{self.my_id}))",
+                "or": f"(and(userA.eq.{self.my_name},userB.eq.{self.target_name}),and(userA.eq.{self.target_name},userB.eq.{self.my_name}))",
                 "order": "date.asc,time.asc"
             }
             headers = {
@@ -746,7 +782,7 @@ class ChatScreen(BoxLayout):
             traceback.print_exc()
 
     def display_message(self, msg):
-        is_sent = (msg.get('userA_id') == self.my_id)
+        is_sent = (msg.get('userA') == self.my_name)
         text = msg.get('log', '')
         time_str = str(msg.get('time', ''))[:5]
         message_id = msg.get('chat_id')
@@ -829,11 +865,14 @@ class ChatScreen(BoxLayout):
             
     def check_new_messages(self, dt):
         """新しいメッセージがあるかチェック"""
+        if not self.my_name:
+            return
+            
         try:
             url = f"{SUPABASE_URL}/rest/v1/chat"
             params = {
                 "select": "chat_id",
-                "or": f"(and(userA_id.eq.{self.my_id},userB_id.eq.{self.target_id}),and(userA_id.eq.{self.target_id},userB_id.eq.{self.my_id}))",
+                "or": f"(and(userA.eq.{self.my_name},userB.eq.{self.target_name}),and(userA.eq.{self.target_name},userB.eq.{self.my_name}))",
             }
             headers = {
                 "apikey": SUPABASE_KEY,
@@ -872,7 +911,7 @@ class ChatScreen(BoxLayout):
                         if os.path.exists(state_path):
                             with open(state_path, 'r', encoding='utf-8') as f:
                                 state = json.load(f)
-                        state[self.target_id] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+                                state[self.target_name] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
                         with open(state_path, 'w', encoding='utf-8') as f:
                             json.dump(state, f)
                     except Exception as e:

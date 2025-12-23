@@ -357,7 +357,9 @@ class WaitingApp(App):
                 class ChatListScreen(Screen):
                     def __init__(self, app_inst, **kwargs):
                         super().__init__(name="chat_list", **kwargs)
-                        layout = MainLayout(app_instance=app_inst)
+                        # current_userからメールアドレスを取得してMainLayoutに渡す
+                        user_mail = app_inst.current_user.get('user_mail') if app_inst.current_user else None
+                        layout = MainLayout(app_instance=app_inst, user_mail=user_mail)
                         self.add_widget(layout)
                 
                 new_screen = ChatListScreen(app_inst=self)
@@ -367,23 +369,23 @@ class WaitingApp(App):
             self.root.current = "chat_list"
 
 
-    def open_chat(self, my_id, target_id):
+    def open_chat(self, my_user_mail, target_name):
         """個別チャット画面を開く"""
         from personal_chat_screen import ChatScreen
 
         if isinstance(self.root, ScreenManager):
 
-            screen_name = f"chat_{my_id}_{target_id}"
+            screen_name = f"chat_{my_user_mail}_{target_name}"
 
             if not self.root.has_screen(screen_name):
 
                 class PersonalChatScreen(Screen):
-                    def __init__(self, my_id, target_id, app_inst, **kwargs):
+                    def __init__(self, my_user_mail, target_name, app_inst, **kwargs):
                         super().__init__(name=screen_name, **kwargs)
-                        chat = ChatScreen(my_id, target_id, app_instance=app_inst)
+                        chat = ChatScreen(my_user_mail, target_name, app_instance=app_inst)
                         self.add_widget(chat)
 
-                new_screen = PersonalChatScreen(my_id, target_id, app_inst=self)
+                new_screen = PersonalChatScreen(my_user_mail, target_name, app_inst=self)
                 self.root.add_widget(new_screen)
 
             # 画面遷移
