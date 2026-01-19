@@ -146,6 +146,7 @@ class RoundedButton(Button):
         self.rect.size = self.size
 
 # FriendItem（1行）
+# FriendItem（1行）
 class FriendItem(BoxLayout):
     def __init__(self, name, img_src, friend_id, sender_mail, parent_screen, **kwargs):
         super().__init__(**kwargs)
@@ -214,33 +215,36 @@ class FriendItem(BoxLayout):
         self.border.size = (self.width, Sdp(3))
     
     def on_add_press(self, instance):
-        """追加ボタンが押された瞬間のフィードバック（少し暗くする）"""
-        instance.bg_color_instruction.rgba = (0.55, 0.78, 0.46, 1)
-        instance.opacity = 0.85
+        """追加ボタンが押された瞬間（視覚フィードバック）"""
+        # 元の色より50%暗くする
+        instance.bg_color_instruction.rgba = (0.35, 0.55, 0.25, 1)
         print("🟢 追加ボタン押下（色変更）")
-    
-    def on_del_press(self, instance):
-        """削除ボタンが押された瞬間のフィードバック（少し暗くする）"""
-        instance.bg_color_instruction.rgba = (0.42, 0.58, 0.68, 1)
-        instance.opacity = 0.85
-        print("🔵 削除ボタン押下（色変更）")
-    
-    def on_accept(self, instance):
-        """承認ボタンが離された時（permission=true）"""
-        print(f"✅ 承認ボタン押下: friend_id={self.friend_id}")
         
         # ボタンを無効化（連打防止）
         self.add_btn.disabled = True
         self.del_btn.disabled = True
-        # ルックを元に戻す
-        instance.bg_color_instruction.rgba = self.add_btn_original_color
-        instance.opacity = 1
+    
+    def on_del_press(self, instance):
+        """削除ボタンが押された瞬間（視覚フィードバック）"""
+        # 元の色より50%暗くする
+        instance.bg_color_instruction.rgba = (0.27, 0.40, 0.50, 1)
+        print("🔵 削除ボタン押下（色変更）")
         
-        # 即座にUIから削除（API呼び出し前）
+        # ボタンを無効化（連打防止）
+        self.add_btn.disabled = True
+        self.del_btn.disabled = True
+    
+    def on_accept(self, instance):
+        """承認ボタンが離された時（permission=true）"""
+        print(f"✅ 承認処理開始: friend_id={self.friend_id}")
+        
+        # 即座にUIから削除
         self.parent_screen.list_layout.remove_widget(self)
-        self.parent_screen.list_layout.do_layout()
-        self.parent_screen.list_layout.canvas.ask_update()
         print("🗑️ UIから即座に削除しました")
+        
+        # 空リストチェック
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.check_empty_list(), 0.1)
         
         try:
             url = f"{SUPABASE_URL}/rest/v1/friend"
@@ -256,41 +260,47 @@ class FriendItem(BoxLayout):
             print(f"📡 承認応答: status={res.status_code}")
             print(f"   Response: {res.text}")
             
-            if res.status_code == 200:
+            # 200と204を両方成功として扱う
+            if res.status_code in [200, 204]:
                 print("✅ 承認成功（permission=true）")
             else:
                 print(f"❌ 承認失敗: {res.status_code}")
                 # 失敗したら元に戻す
-                self.parent_screen.list_layout.add_widget(self)
-                instance.bg_color_instruction.rgba = self.add_btn_original_color
-                self.add_btn.disabled = False
-                self.del_btn.disabled = False
+                if self.parent_screen and self.parent_screen.list_layout:
+                    # 空メッセージを削除してからアイテムを追加
+                    for child in self.parent_screen.list_layout.children[:]:
+                        if isinstance(child, Label):
+                            self.parent_screen.list_layout.remove_widget(child)
+                    self.parent_screen.list_layout.add_widget(self)
+                    instance.bg_color_instruction.rgba = self.add_btn_original_color
+                    self.add_btn.disabled = False
+                    self.del_btn.disabled = False
         except Exception as e:
             print(f"❌ 承認エラー: {e}")
             import traceback
             traceback.print_exc()
             # エラー時も元に戻す
-            self.parent_screen.list_layout.add_widget(self)
-            instance.bg_color_instruction.rgba = self.add_btn_original_color
-            self.add_btn.disabled = False
-            self.del_btn.disabled = False
-    
+            if self.parent_screen and self.parent_screen.list_layout:
+                # 空メッセージを削除してからアイテムを追加
+                for child in self.parent_screen.list_layout.children[:]:
+                    if isinstance(child, Label):
+                        self.parent_screen.list_layout.remove_widget(child)
+                self.parent_screen.list_layout.add_widget(self)
+                instance.bg_color_instruction.rgba = self.add_btn_original_color
+                self.add_btn.disabled = False
+                self.del_btn.disabled = False
+
     def on_reject(self, instance):
         """拒否ボタンが離された時（permission=false）"""
-        print(f"🗑️ 拒否ボタン押下: friend_id={self.friend_id}")
+        print(f"🗑️ 拒否処理開始: friend_id={self.friend_id}")
         
-        # ボタンを無効化（連打防止）
-        self.add_btn.disabled = True
-        self.del_btn.disabled = True
-        # ルックを元に戻す
-        instance.bg_color_instruction.rgba = self.del_btn_original_color
-        instance.opacity = 1
-        
-        # 即座にUIから削除（API呼び出し前）
+        # 即座にUIから削除
         self.parent_screen.list_layout.remove_widget(self)
-        self.parent_screen.list_layout.do_layout()
-        self.parent_screen.list_layout.canvas.ask_update()
         print("🗑️ UIから即座に削除しました")
+        
+        # 空リストチェック
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self.check_empty_list(), 0.1)
         
         try:
             url = f"{SUPABASE_URL}/rest/v1/friend"
@@ -306,24 +316,49 @@ class FriendItem(BoxLayout):
             print(f"📡 拒否応答: status={res.status_code}")
             print(f"   Response: {res.text}")
             
-            if res.status_code == 200:
+            # 200と204を両方成功として扱う
+            if res.status_code in [200, 204]:
                 print("✅ 拒否成功（permission=false）")
             else:
                 print(f"❌ 拒否失敗: {res.status_code}")
                 # 失敗したら元に戻す
-                self.parent_screen.list_layout.add_widget(self)
-                instance.bg_color_instruction.rgba = self.del_btn_original_color
-                self.add_btn.disabled = False
-                self.del_btn.disabled = False
+                if self.parent_screen and self.parent_screen.list_layout:
+                    # 空メッセージを削除してからアイテムを追加
+                    for child in self.parent_screen.list_layout.children[:]:
+                        if isinstance(child, Label):
+                            self.parent_screen.list_layout.remove_widget(child)
+                    self.parent_screen.list_layout.add_widget(self)
+                    instance.bg_color_instruction.rgba = self.del_btn_original_color
+                    self.add_btn.disabled = False
+                    self.del_btn.disabled = False
         except Exception as e:
             print(f"❌ 拒否エラー: {e}")
             import traceback
             traceback.print_exc()
             # エラー時も元に戻す
-            self.parent_screen.list_layout.add_widget(self)
-            instance.bg_color_instruction.rgba = self.del_btn_original_color
-            self.add_btn.disabled = False
-            self.del_btn.disabled = False
+            if self.parent_screen and self.parent_screen.list_layout:
+                # 空メッセージを削除してからアイテムを追加
+                for child in self.parent_screen.list_layout.children[:]:
+                    if isinstance(child, Label):
+                        self.parent_screen.list_layout.remove_widget(child)
+                self.parent_screen.list_layout.add_widget(self)
+                instance.bg_color_instruction.rgba = self.del_btn_original_color
+                self.add_btn.disabled = False
+                self.del_btn.disabled = False
+    
+    def check_empty_list(self):
+        """リストが空になったら"未承認の申請はありません"を表示"""
+        if len(self.parent_screen.list_layout.children) == 0:
+            msg = Label(
+                text="未承認の申請はありません",
+                font_name="Japanese",
+                font_size=Ssp(18),
+                color=(0, 0, 0, 1),
+                size_hint_y=None,
+                height=Sdp(60),
+            )
+            self.parent_screen.list_layout.add_widget(msg)
+            print("📝 空メッセージを表示しました")
 
 # メイン画面
 class FriendRequestScreen(Screen):
