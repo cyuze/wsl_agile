@@ -13,7 +13,8 @@ import requests
 import json
 import threading
 from map_service import (save_my_location, fetch_friends, fetch_friend_icon, 
-                        get_friend_mail, fetch_friend_location)
+                        get_friend_mail, fetch_friend_location, initialize_user_location, 
+                        fetch_friends_by_mail, get_user_id_by_mail)
 from chat_screen import MainLayout  # この行を追加
 from settings import SettingsScreen  # この行を追加(settings)
 from kivy_garden.mapview import MapMarker
@@ -43,21 +44,8 @@ def request_location_permissions():
 SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
 
-# ユーザー情報を users.json から取得
-def get_current_user():
-    """users.json からログイン中のユーザー情報を取得"""
-    try:
-        with open("users.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list) and len(data) > 0:
-            return data[0]
-    except Exception as e:
-        print(f"⚠️ get_current_user error: {e}")
-    return None
-
-current_user = get_current_user()
-MY_USER_MAIL = current_user.get("user_mail") if current_user else None
 MY_ID = "cb3cce5a-3ec7-4837-b998-fd9d5446f04a"  # 後方互換性のため
+MY_USER_MAIL = None  # 後で設定される
 
 # GPS 判定
 try:
@@ -137,7 +125,7 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
     def __init__(self, icon_url, friend_id, app_instance, **kwargs):
         super().__init__(**kwargs)
 
-        self.size = (70, 70)
+        self.size = (100, 100)
         self.friend_id = friend_id
         self.app_instance = app_instance
 
@@ -191,15 +179,23 @@ class ImageButton(ButtonBehavior, FloatLayout):
 # メイン画面
 # ===============================================================
 class MainScreen(FloatLayout):
-    def __init__(self, app_instance=None, **kwargs):  # app_instance=Noneを追加
+    def __init__(self, app_instance=None, current_user=None, **kwargs):  # current_user を追加
         super().__init__(**kwargs)
-        self.app_instance = app_instance  # この行を追加
+        self.app_instance = app_instance
+        self.current_user = current_user
         Window.clearcolor = (1,1,1,1)
+
+        # ユーザーのIDを取得
+        self.user_id = current_user.get("user_id") if current_user else None
+        print(f"🔍 DEBUG: MainScreen initialized with user_id = {self.user_id}")
 
         self.friend_meetings = {}
         self.friend_markers = {}
         self.friend_icons = {}
         self.my_marker = None
+
+        # ログイン時に位置情報を初期化
+        self.initialize_user_location_on_open()
 
         # MapView
         self.mapview = MapView(lat=39.701083, lon=141.136132, zoom=14, map_source=GSImapSource())
@@ -276,6 +272,48 @@ class MainScreen(FloatLayout):
                 pass
     
 
+    def initialize_user_location_on_open(self):
+        """Map画面オープン時にユーザーの位置情報をlocationテーブルに初期化し、user_idを取得"""
+        global MY_USER_MAIL
+        try:
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and len(data) > 0:
+                current_user = data[0]
+                user_mail = current_user.get("user_mail")
+                if user_mail:
+                    MY_USER_MAIL = user_mail
+                    
+                    # users.json から直接 user_id を取得する場合
+                    if "user_id" in current_user:
+                        self.user_id = current_user.get("user_id")
+                        print(f"🔍 DEBUG: Got user_id from users.json = {self.user_id}")
+                    else:
+                        # users.json に user_id がない場合は Supabase から取得
+                        self.fetch_user_id_from_supabase(user_mail)
+                    
+                    print(f"🔍 DEBUG: Initializing location for {user_mail}")
+                    result = initialize_user_location(user_mail)
+                    print(f"🔍 DEBUG: initialize_user_location result = {result}")
+        except Exception as e:
+            print(f"⚠️ initialize_user_location_on_open error: {e}")
+    
+    def fetch_user_id_from_supabase(self, user_mail):
+        """users.json にuser_idがない場合、Supabase から user_id を取得"""
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/users"
+            headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+            params = {"select": "user_id", "user_mail": f"eq.{user_mail}"}
+            
+            res = requests.get(url, headers=headers, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                if data:
+                    self.user_id = data[0].get("user_id")
+                    print(f"🔍 DEBUG: Got user_id from Supabase = {self.user_id}")
+        except Exception as e:
+            print(f"⚠️ fetch_user_id_from_supabase error: {e}")
+
     # ======================================
     # 4つのボタン処理
     # ======================================
@@ -350,14 +388,36 @@ class MainScreen(FloatLayout):
     # ===========================================================
     def update_friends(self, dt):
         """フレンドの位置情報を更新"""
-        friends = fetch_friends(MY_ID)
-        for fid in friends:
-            friend_mail = get_friend_mail(fid)
-            if friend_mail:
+        try:
+            # users.json から user_mail を取得
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, list) or len(data) == 0:
+                print("⚠️ update_friends: users.json is empty")
+                return
+            
+            user_mail = data[0].get("user_mail")
+            if not user_mail:
+                print("⚠️ update_friends: user_mail not found in users.json")
+                return
+            
+            # user_mail から友人のメールアドレスを取得
+            friends_mail_list = fetch_friends_by_mail(user_mail)
+            print(f"🔍 DEBUG: Found {len(friends_mail_list)} friends for {user_mail}")
+            
+            # friends_mail_list は既にメールアドレスなので、そのまま使用
+            for friend_mail in friends_mail_list:
+                print(f"🔍 DEBUG: Friend mail = {friend_mail}")
                 location = fetch_friend_location(friend_mail)
+                print(f"🔍 DEBUG: Friend {friend_mail} location = {location}")
                 if location:
                     lat, lon = location
-                    self.update_friend_marker(fid, lat, lon)
+                    # user_idが必要なため、メールからuser_idを取得
+                    friend_user_id = get_user_id_by_mail(friend_mail)
+                    if friend_user_id:
+                        self.update_friend_marker(friend_user_id, lat, lon)
+        except Exception as e:
+            print(f"⚠️ update_friends error: {e}")
 
 
 
@@ -416,6 +476,10 @@ class MyApp(App):
     
             
     def open_friend_addition(self):
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
         from addition import FriendApp
         self.root.clear_widgets()
         screen = FriendApp()
@@ -436,6 +500,10 @@ class MyApp(App):
 
     def open_settings(self):  # このメソッドを追加
         """設定画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
         from settings import SettingsScreen
         self.root.clear_widgets()
         settings_screen = SettingsScreen(app_instance=self)
@@ -443,6 +511,10 @@ class MyApp(App):
         
     def open_friend_profile(self, friend_id):
         """フレンドプロフィール画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
         from friend_profile import FriendProfileScreen  # friend_profile.pyからインポート
         self.root.clear_widgets()
         profile_screen = FriendProfileScreen(friend_id=friend_id, app_instance=self)
