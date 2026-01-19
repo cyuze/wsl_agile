@@ -110,6 +110,14 @@ def save_my_location(gps):
         # users.json からメールを取得
         with open("users.json", "r", encoding="utf-8") as f:
             data = json.load(f)
+        
+        # data がリスト形式の場合は最初の要素を取得
+        if isinstance(data, list):
+            if len(data) == 0:
+                print("⚠️ save_my_location: users.json is empty list")
+                return False
+            data = data[0]
+        
         mail = data.get("user_mail") or data.get("mail")
         if not mail:
             print("⚠️ save_my_location: user_mail not found in users.json")
@@ -135,15 +143,29 @@ def save_my_location(gps):
             "update_at": datetime.utcnow().isoformat() + "Z",
         }
 
-        url = f"{SUPABASE_URL}/rest/v1/location?on_conflict=mail"
-        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
+        url = f"{SUPABASE_URL}/rest/v1/location"
+        headers_base = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
 
-        # POST with on_conflict=mail will upsert the row based on mail
-        res = requests.post(url, headers=headers, data=json.dumps(payload))
-        if res.status_code in (200, 201):
-            return True
-        else:
-            print(f"⚠️ save_my_location: supabase returned {res.status_code} {res.text}")
+        # まず PATCH で既存行を更新してみる（mail が一致する行）
+        try:
+            pres = requests.patch(url, headers=headers_base, params={"mail": f"eq.{mail}"}, data=json.dumps({"location": loc_str, "update_at": datetime.utcnow().isoformat() + "Z"}))
+            if pres.status_code in (200, 204):
+                return True
+        except Exception:
+            pass
+
+        # PATCHで更新できなければ、POSTで upsert を試す（Prefer ヘッダで merge-duplicates を指定）
+        headers_insert = headers_base.copy()
+        headers_insert["Prefer"] = "resolution=merge-duplicates"
+        insert_url = f"{url}?on_conflict=mail"
+        try:
+            ires = requests.post(insert_url, headers=headers_insert, data=json.dumps(payload))
+            if ires.status_code in (200, 201, 204):
+                return True
+            else:
+                print(f"⚠️ save_my_location: supabase returned {ires.status_code} {ires.text}")
+        except Exception as e:
+            print("⚠️ save_my_location: post error", e)
     except Exception as e:
         print("⚠️ map_service.save_my_location:", e)
     return False

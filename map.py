@@ -11,6 +11,9 @@ from kivy.clock import Clock
 import random
 import requests
 import json
+import threading
+from map_service import (save_my_location, fetch_friends, fetch_friend_icon, 
+                        get_friend_mail, fetch_friend_location)
 from chat_screen import MainLayout  # この行を追加
 from settings import SettingsScreen  # この行を追加(settings)
 from kivy_garden.mapview import MapMarker
@@ -39,7 +42,22 @@ def request_location_permissions():
 # ===============================================================
 SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
-MY_ID = "cb3cce5a-3ec7-4837-b998-fd9d5446f04a"
+
+# ユーザー情報を users.json から取得
+def get_current_user():
+    """users.json からログイン中のユーザー情報を取得"""
+    try:
+        with open("users.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+    except Exception as e:
+        print(f"⚠️ get_current_user error: {e}")
+    return None
+
+current_user = get_current_user()
+MY_USER_MAIL = current_user.get("user_mail") if current_user else None
+MY_ID = "cb3cce5a-3ec7-4837-b998-fd9d5446f04a"  # 後方互換性のため
 
 # GPS 判定
 try:
@@ -235,6 +253,11 @@ class MainScreen(FloatLayout):
         
         # スケジュールを保存
         self.friend_update_event = Clock.schedule_interval(self.update_friends, 5)
+        self.send_location_event = Clock.schedule_interval(self.send_my_location, 10)
+        
+        # マップ表示時に1回位置を送信
+        Clock.schedule_once(lambda dt: self.send_my_location(dt), 0.5)
+        
         if not HAS_GPS:
             self.location_event = Clock.schedule_interval(self.simulate_location, 3)
     
@@ -242,6 +265,8 @@ class MainScreen(FloatLayout):
         """画面離脱時に定期処理を停止"""
         if hasattr(self, 'friend_update_event'):
             self.friend_update_event.cancel()
+        if hasattr(self, 'send_location_event'):
+            self.send_location_event.cancel()
         if hasattr(self, 'location_event'):
             self.location_event.cancel()
         if HAS_GPS:
@@ -279,7 +304,8 @@ class MainScreen(FloatLayout):
     def on_location(self, **kwargs):
         lat = kwargs.get("lat")
         lon = kwargs.get("lon")
-        if lat and lon: self.update_my_marker(lat, lon)
+        if lat and lon:
+            Clock.schedule_once(lambda dt: self.update_my_marker(lat, lon), 0)
     def on_status(self, stype, status):
         print(f"📡 GPS status: {stype} - {status}")
 
@@ -297,98 +323,54 @@ class MainScreen(FloatLayout):
     # 自分マーカー更新
     # ===========================================================
     def update_my_marker(self, lat, lon):
+        """マーカーの表示位置を更新（Supabase送信はしない）"""
         if self.my_marker:
             self.my_marker.lat = lat
             self.my_marker.lon = lon
         else:
             self.my_marker = MapMarker(lat=lat, lon=lon, source="img/pin.png")
             self.mapview.add_marker(self.my_marker)
+        # 現在の座標を保持
+        self.lat = lat
+        self.lon = lon
+
+    # ===========================================================
+    # 位置情報送信
+    # ===========================================================
+    def send_my_location(self, dt):
+        """現在の位置情報を Supabase に送信（バックグラウンドスレッドで実行）"""
+        if hasattr(self, 'lat') and hasattr(self, 'lon'):
+            if MY_USER_MAIL:
+                threading.Thread(target=lambda: save_my_location((self.lat, self.lon)), daemon=True).start()
+            else:
+                print("⚠️ send_my_location: user_mail not available")
 
     # ===========================================================
     # 友だち情報更新
     # ===========================================================
     def update_friends(self, dt):
-        friends = self.fetch_friends(MY_ID)
+        """フレンドの位置情報を更新"""
+        friends = fetch_friends(MY_ID)
         for fid in friends:
-            if fid not in self.friend_meetings:
-                mid = self.fetch_or_create_meeting(MY_ID, fid)
-                if mid: self.friend_meetings[fid] = mid
-            self.fetch_friend_location(fid)
+            friend_mail = get_friend_mail(fid)
+            if friend_mail:
+                location = fetch_friend_location(friend_mail)
+                if location:
+                    lat, lon = location
+                    self.update_friend_marker(fid, lat, lon)
 
-    def fetch_friends(self, user_id):
-        url = f"{SUPABASE_URL}/rest/v1/friend"
-        params = {"select":"send_user,recive_user,permission",
-                  "or":f"(send_user.eq.{user_id},recive_user.eq.{user_id})"}
-        headers = {"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}"}
-        try:
-            res = requests.get(url,headers=headers,params=params)
-            if res.status_code!=200: return []
-            friends = []
-            for r in res.json():
-                if not r.get("permission"): continue
-                fid = r["recive_user"] if r["send_user"]==user_id else r["send_user"]
-                if fid!=user_id: friends.append(fid)
-            return friends
-        except Exception as e:
-            print("⚠️ fetch_friends:", e)
-            return []
 
-    def fetch_or_create_meeting(self, a, b):
-        url = f"{SUPABASE_URL}/rest/v1/meeting"
-        params = {"select":"meeting_id",
-                  "or":f"(and(userA_id.eq.{a},userB_id.eq.{b}),and(userA_id.eq.{b},userB_id.eq.{a}))"}
-        headers = {"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}"}
-        try:
-            res = requests.get(url,headers=headers,params=params)
-            data = res.json()
-            if data: return data[0]["meeting_id"]
-            payload = {"userA_id":a,"userB_id":b}
-            headers["Content-Type"]="application/json"
-            res = requests.post(url,headers=headers,data=json.dumps(payload))
-            if res.status_code in (200,201): return res.json()[0]["meeting_id"]
-        except Exception as e:
-            print("⚠️ fetch_or_create_meeting:", e)
-        return None
 
-    def fetch_friend_icon(self, friend_id):
-        if friend_id in self.friend_icons: return self.friend_icons[friend_id]
-        url = f"{SUPABASE_URL}/rest/v1/users?select=icon_url&user_id=eq.{friend_id}"
-        headers = {"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}"}
-        try:
-            res = requests.get(url,headers=headers)
-            data = res.json()
-            if data:
-                self.friend_icons[friend_id] = data[0]["icon_url"]
-                return data[0]["icon_url"]
-        except Exception as e:
-            print("⚠️ fetch_friend_icon:", e)
-        return None
 
-    def fetch_friend_location(self, friend_id):
-        mid = self.friend_meetings.get(friend_id)
-        if not mid: return
-        url = f"{SUPABASE_URL}/rest/v1/meeting?select=userB_zahyo,userA_zahyo,userA_id,userB_id&meeting_id=eq.{mid}"
-        headers = {"apikey":SUPABASE_KEY,"Authorization":f"Bearer {SUPABASE_KEY}"}
-        try:
-            res = requests.get(url,headers=headers)
-            if res.status_code!=200: return
-            data = res.json()
-            if not data: return
-            row = data[0]
-            raw = row["userB_zahyo"] if row["userA_id"]==MY_ID else row["userA_zahyo"]
-            if not raw: return
-            lat, lon = map(float, raw.split(","))
-            self.update_friend_marker(friend_id, lat, lon)
-        except Exception as e:
-            print("⚠️ fetch_friend_location:", e)
 
     def update_friend_marker(self, friend_id, lat, lon):
+        """フレンドのマーカーを更新または作成"""
         if friend_id in self.friend_markers:
             marker = self.friend_markers[friend_id]
             marker.lat = lat
             marker.lon = lon
         else:
-            icon_url = self.fetch_friend_icon(friend_id) or "img/default_user.png"
+            icon_url = fetch_friend_icon(friend_id) or "img/cat_placeholder.png"
 
             marker = FriendMarker(
                 lat, lon, icon_url,
@@ -397,6 +379,7 @@ class MainScreen(FloatLayout):
 
             self.mapview.add_marker(marker)
             self.friend_markers[friend_id] = marker
+
 
 
 # ===============================================================
