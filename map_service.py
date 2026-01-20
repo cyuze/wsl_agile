@@ -10,19 +10,37 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 MY_ID = "cb3cce5a-3ec7-4837-b998-fd9d5446f04a"
 
 
-def initialize_user_location(user_mail, initial_lat=39.701083, initial_lon=141.136132):
+def initialize_user_location(user_mail, initial_lat=None, initial_lon=None):
     """ログインしたユーザーの位置情報を location テーブルに初期化
     
     Args:
         user_mail: ユーザーのメールアドレス
-        initial_lat: 初期緯度（デフォルト：岩手県花巻市周辺）
+        initial_lat: 初期緯度（デフォルト：None。Noneの場合は既存の位置情報を保持）
         initial_lon: 初期経度
     
     Returns:
-        True: 初期化成功
+        True: 初期化成功または既存データ保持
         False: エラー発生
     """
     try:
+        # 既存のレコードを確認（重要：既存の位置情報を絶対に上書きしない）
+        url = f"{SUPABASE_URL}/rest/v1/location"
+        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+        params = {"select": "location", "mail": f"eq.{user_mail}"}
+        res = requests.get(url, headers=headers, params=params)
+        if res.status_code == 200 and res.json():
+            # 既存の位置情報がある場合は、絶対に上書きしない
+            existing_location = res.json()[0].get("location")
+            print(f"✅ map_service.initialize_user_location: {user_mail} の位置情報は既存の値を保持 {existing_location}")
+            return True
+        
+        # 既存の位置情報がない場合のみ、新規作成を試みる
+        if initial_lat is None or initial_lon is None:
+            # GPS待ちモード：初期値がないため、位置情報がGPSで取得されるまで待つ
+            print(f"⚠️ map_service.initialize_user_location: {user_mail} の位置情報はGPS取得待ち（初期値なし）")
+            return False
+        
+        # 初期座標が指定されている場合のみ作成
         loc_str = "{" + f"{initial_lat},{initial_lon}" + "}"
         payload = {
             "mail": user_mail,
@@ -30,17 +48,14 @@ def initialize_user_location(user_mail, initial_lat=39.701083, initial_lon=141.1
             "update_at": datetime.utcnow().isoformat() + "Z",
         }
 
-        url = f"{SUPABASE_URL}/rest/v1/location"
-        headers_base = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
-
-        # Prefer ヘッダで merge-duplicates を指定して upsert
-        headers_insert = headers_base.copy()
+        headers_insert = headers.copy()
+        headers_insert["Content-Type"] = "application/json"
         headers_insert["Prefer"] = "resolution=merge-duplicates"
         insert_url = f"{url}?on_conflict=mail"
         
         res = requests.post(insert_url, headers=headers_insert, data=json.dumps(payload))
         if res.status_code in (200, 201, 204):
-            print(f"✅ map_service.initialize_user_location: {user_mail} の位置情報を初期化")
+            print(f"✅ map_service.initialize_user_location: {user_mail} の位置情報を初期化 ({initial_lat}, {initial_lon})")
             return True
         else:
             print(f"⚠️ map_service.initialize_user_location: POST failed {res.status_code} {res.text}")
@@ -254,18 +269,22 @@ def fetch_friend_location(friend_mail):
     try:
         res = requests.get(url, headers=headers)
         if res.status_code != 200:
+            print(f"⚠️ map_service.fetch_friend_location: GET failed {res.status_code} for {friend_mail}")
             return None
         data = res.json()
         if not data:
+            print(f"⚠️ map_service.fetch_friend_location: No location data for {friend_mail}")
             return None
         loc_str = data[0].get("location")
         if not loc_str:
+            print(f"⚠️ map_service.fetch_friend_location: Empty location string for {friend_mail}")
             return None
         # "{lat,lon}" 形式をパース
         lat, lon = map(float, loc_str.strip("{}").split(","))
+        print(f"👥 [友人位置情報取得] {friend_mail}: 緯度 {lat:.6f}, 経度 {lon:.6f}")
         return lat, lon
     except Exception as e:
-        print("⚠️ map_service.fetch_friend_location:", e)
+        print(f"⚠️ map_service.fetch_friend_location: {e}")
     return None
 
 
@@ -307,6 +326,7 @@ def save_my_location(gps):
             print("⚠️ save_my_location: unsupported gps format")
             return False
 
+        print(f"📍 [位置情報処理] ユーザー: {mail} (自分のみ操作), 緯度: {lat:.6f}, 経度: {lon:.6f}")
         loc_str = "{" + f"{lat},{lon}" + "}"
         payload = {
             "mail": mail,
@@ -319,19 +339,23 @@ def save_my_location(gps):
 
         # まず PATCH で既存行を更新してみる（mail が一致する行）
         try:
+            # ⚠️ WHERE mail = {mail} という条件で更新 - 自分のメールアドレスに対してのみ
             pres = requests.patch(url, headers=headers_base, params={"mail": f"eq.{mail}"}, data=json.dumps({"location": loc_str, "update_at": datetime.utcnow().isoformat() + "Z"}))
             if pres.status_code in (200, 204):
+                print(f"✅ [位置情報更新成功] {mail} の行を更新, 緯度: {lat:.6f}, 経度: {lon:.6f}")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ save_my_location PATCH error: {e}")
 
         # PATCHで更新できなければ、POSTで upsert を試す（Prefer ヘッダで merge-duplicates を指定）
         headers_insert = headers_base.copy()
         headers_insert["Prefer"] = "resolution=merge-duplicates"
         insert_url = f"{url}?on_conflict=mail"
         try:
+            # on_conflict=mail で自分のメールアドレス用の行のみ操作
             ires = requests.post(insert_url, headers=headers_insert, data=json.dumps(payload))
             if ires.status_code in (200, 201, 204):
+                print(f"✅ [位置情報登録成功] {mail} の行を作成/更新, 緯度: {lat:.6f}, 経度: {lon:.6f}")
                 return True
             else:
                 print(f"⚠️ save_my_location: supabase returned {ires.status_code} {ires.text}")
