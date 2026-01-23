@@ -27,6 +27,9 @@ from kivy.uix.screenmanager import ScreenManager, Screen, NoTransition
 from kivy.uix.scrollview import ScrollView
 from picture import PictureScreen
 
+from kivy.uix.popup import Popup
+from kivy.uix.textinput import TextInput
+
 
 SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
@@ -163,7 +166,35 @@ class SettingsScreen(Screen):
 
         except Exception as e:
             print("設定画面のユーザー情報更新エラー:", e)
+            
+    def load_settings(self):
+        if not os.path.exists("settings.json"):
+            return False  # デフォルトOFF
 
+        try:
+            with open("settings.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("meetup_time", False)
+        except Exception as e:
+            print(f"設定読み込みエラー: {e}")
+            return False
+    def save_settings(self, value):
+        data = {
+            "meetup_time": value
+        }
+        try:
+            with open("settings.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            print("✅ settings.json に保存しました")
+        except Exception as e:
+            print(f"設定保存エラー: {e}")
+            
+    def on_switch_active(self, instance, value):
+        if self.initializing:
+            return  # 起動時のactive設定では保存しない
+
+        print(f"待ち合わせ時間 Switch: {value}")
+        self.save_settings(value)
 
 
     def build_ui(self):
@@ -286,24 +317,37 @@ class SettingsScreen(Screen):
         edit_layout.add_widget(inner_layout)
         root_layout.add_widget(edit_layout)
 
-        # 通知
-        root_layout.add_widget(left_label("通知"))
-        notif_layout = GridLayout(
-            cols=2, spacing=Sdp(20), size_hint_y=None, height=Sdp(160)
-        )
-        notif_layout.add_widget(left_label("位置情報関係"))
-        notif_layout.add_widget(Switch(active=True))
-        notif_layout.add_widget(left_label("待ち合わせ時間"))
-        notif_layout.add_widget(Switch(active=False))
-        root_layout.add_widget(notif_layout)
-
         # プライバシー
         root_layout.add_widget(left_label("プライバシー"))
         privacy_layout = GridLayout(
             cols=2, spacing=Sdp(20), size_hint_y=None, height=Sdp(80)
         )
         privacy_layout.add_widget(left_label("位置情報の表示"))
-        privacy_layout.add_widget(Switch(active=True))
+        self.initializing = True
+
+        self.meetup_switch = Switch(active=False)
+
+        # 🔹 保存済みの状態を復元
+        saved_value = self.load_settings()
+        self.meetup_switch.active = saved_value
+
+        self.initializing = False
+
+        # 🔹 状態変化を監視
+        self.meetup_switch.bind(active=self.on_switch_active)
+        self.initializing = True
+
+        self.meetup_switch = Switch(active=False)
+
+        # 🔹 保存済みの状態を復元
+        saved_value = self.load_settings()
+        self.meetup_switch.active = saved_value
+
+        self.initializing = False
+
+        # 🔹 状態変化を監視
+        self.meetup_switch.bind(active=self.on_switch_active)
+        privacy_layout.add_widget(self.meetup_switch)
         root_layout.add_widget(privacy_layout)
 
         # 確定
@@ -346,7 +390,185 @@ class SettingsScreen(Screen):
             self.app_instance.open_picture(caller="settings")
 
     def on_nameEdit_press(self, instance):
-        print("名前編集ボタンが押されました。編集画面に遷移します。")
+        """名前編集ボタンが押されたときの処理"""
+        print("名前編集ボタンが押されました。編集ダイアログを表示します。")
+        self.show_name_edit_dialog()
+        
+    def on_switch_active_priv(self, instance, value):
+        if value:
+            print("プライバシースイッチON")
+        else:
+            print("プライバシースイッチOFF")
+
+
+
+    def show_name_edit_dialog(self):
+        """名前編集用のポップアップダイアログを表示"""
+        # レイアウト作成
+        content = BoxLayout(
+            orientation='vertical',
+            padding=Sdp(20),
+            spacing=Sdp(15)
+        )
+        
+        
+        
+        # テキスト入力欄
+        text_input = TextInput(
+            text=self.user_name,
+            multiline=False,
+            size_hint_y=None,
+            height=Sdp(50),
+            font_size=Ssp(24),
+            font_name='Japanese',
+            padding=[Sdp(10), Sdp(10)]
+        )
+        content.add_widget(text_input)
+        
+        # ボタンレイアウト
+        button_layout = BoxLayout(
+            orientation='horizontal',
+            spacing=Sdp(15),
+            size_hint_y=None,
+            height=Sdp(60)
+        )
+        
+        # キャンセルボタン
+        cancel_btn = RoundedButton(
+            text='キャンセル',
+            font_name='Japanese',
+            font_size=Ssp(20),
+            color=(0, 0, 0, 1)
+        )
+        
+        # 保存ボタン
+        save_btn = RoundedButton(
+            text='保存',
+            font_name='Japanese',
+            font_size=Ssp(20),
+            color=(0, 0, 0, 1)
+        )
+        
+        button_layout.add_widget(cancel_btn)
+        button_layout.add_widget(save_btn)
+        content.add_widget(button_layout)
+        
+        # ポップアップ作成
+        popup = Popup(
+            title='名前の変更',
+            title_font='Japanese',
+            title_size=Ssp(28),
+            content=content,
+            size_hint=(0.8, None),
+            height=Sdp(250),
+            separator_color=(0.671, 0.906, 0.510, 1)
+        )
+        
+        # ボタンのイベント設定
+        cancel_btn.bind(on_press=popup.dismiss)
+        save_btn.bind(on_press=lambda x: self.save_new_name(text_input.text, popup))
+        
+        popup.open()
+
+    def save_new_name(self, new_name, popup):
+        """新しい名前をSupabaseに保存"""
+        try:
+            # 空白チェック
+            if not new_name or not new_name.strip():
+                print("❌ 名前が空です")
+                return
+            
+            new_name = new_name.strip()
+            
+            # users.jsonから現在のユーザーメールを取得
+            json_path = os.path.join(os.path.dirname(__file__), "users.json")
+            
+            if not os.path.exists(json_path):
+                print("❌ users.json が見つかりません")
+                return
+            
+            with open(json_path, "r", encoding="utf-8") as f:
+                users = json.load(f)
+            
+            user_mail = users[0].get("user_mail", "guest")
+            
+            # Supabaseのusersテーブルを更新
+            db_url = f"{SUPABASE_URL}/rest/v1/users"
+            params = {"user_mail": f"eq.{user_mail}"}
+            payload = {"user_name": new_name}
+            
+            res = requests.patch(db_url, headers=headers, params=params, json=payload)
+            
+            if res.status_code in [200, 204]:
+                print(f"✅ 名前を更新しました: {new_name}")
+                
+                # ローカルの情報も更新
+                self.user_name = new_name
+                self.name_label.text = new_name
+                
+                # ポップアップを閉じる
+                popup.dismiss()
+                
+                # 成功メッセージ（オプション）
+                self.show_success_message("名前を変更しました")
+            else:
+                print(f"❌ DB error: ステータス {res.status_code}")
+                print(f"レスポンス: {res.text}")
+                self.show_error_message("名前の変更に失敗しました")
+        
+        except Exception as e:
+            print(f"❌ 名前更新エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            self.show_error_message("エラーが発生しました")
+
+    def show_success_message(self, message):
+        """成功メッセージを表示"""
+        content = BoxLayout(orientation='vertical', padding=Sdp(20))
+        content.add_widget(Label(
+            text=message,
+            font_name='Japanese',
+            font_size=Ssp(24),
+            color=(1, 1, 1, 1)
+        ))
+        
+        popup = Popup(
+            title='成功',
+            title_font='Japanese',
+            content=content,
+            size_hint=(0.7, None),
+            separator_color=(0.671, 0.906, 0.510, 1),
+            height=Sdp(150)
+        )
+        
+        # 1.5秒後に自動で閉じる
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: popup.dismiss(), 1.5)
+        popup.open()
+
+    def show_error_message(self, message):
+        """エラーメッセージを表示"""
+        content = BoxLayout(orientation='vertical', padding=Sdp(20))
+        content.add_widget(Label(
+            text=message,
+            font_name='Japanese',
+            font_size=Ssp(24),
+            color=(1, 1, 1, 1)
+        ))
+        
+        popup = Popup(
+            title='エラー',
+            title_font='Japanese',
+            content=content,
+            separator_color=(0.671, 0.906, 0.510, 1),
+            size_hint=(0.7, None),
+            height=Sdp(150)
+        )
+        
+        # 2秒後に自動で閉じる
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: popup.dismiss(), 2)
+        popup.open()
 
     def on_logout_press(self, instance):
         """ログアウトボタンが押された瞬間（色を暗くする）"""
@@ -394,19 +616,49 @@ class SettingsScreen(Screen):
 
     def on_submit_press(self, instance):
         print("確定ボタンが押されました。変更内容を確定します。")
+        self.show_success_message("変更内容を確定しました。")
+        if self.app_instance:
+                self.app_instance.back_to_map()
+                return True
+        else: return False
 
     def update_icon_image(self, image_path):
         """設定画面のアイコン画像を更新"""
         if self.profile_icon:
-            self.profile_icon.source = image_path
-            # AsyncImage を直接更新
-            self.profile_icon.img.source = image_path
+            # キャッシュバスター付きで更新
+            import time
+            if "?" in image_path:
+                # すでにクエリパラメータがある場合
+                new_path = f"{image_path}&reload={int(time.time())}"
+            else:
+                new_path = f"{image_path}?t={int(time.time())}"
+            
+            self.profile_icon.img.source = new_path
             self.profile_icon.img.reload()
+            print(f"🖼️ UIアイコン更新: {new_path}")
 
     def update_user_icon(self, icon_path):
         """ログイン中ユーザーのアイコンを更新"""
         try:
-            user_name = self.current_user["user_name"]
+            # users.jsonからユーザー情報を取得
+            json_path = os.path.join(os.path.dirname(__file__), "users.json")
+            
+            if not os.path.exists(json_path):
+                print("users.json が見つかりません")
+                return False
+                
+            with open(json_path, "r", encoding="utf-8") as f:
+                users = json.load(f)
+            
+            user_mail = users[0].get("user_mail", "guest")
+            
+            # Supabaseからユーザー情報取得
+            row = get_user_by_mail(user_mail)
+            if not row:
+                print("ユーザー情報が取得できませんでした")
+                return False
+                
+            user_name = row["user_name"]
 
             # ファイル名を決定
             safe_name = user_name.replace("@", "_at_").replace(".", "_")
@@ -416,7 +668,7 @@ class SettingsScreen(Screen):
             with open(icon_path, "rb") as f:
                 image_data = f.read()
 
-            # Storage にアップロード（上書き）
+            # Storage にアップロード(上書き)
             storage_url = f"{SUPABASE_URL}/storage/v1/object/icon/{file_name}"
             storage_headers = {
                 "apikey": SUPABASE_KEY,
@@ -427,11 +679,13 @@ class SettingsScreen(Screen):
             res = requests.post(storage_url, headers=storage_headers, data=image_data)
 
             if res.status_code not in [200, 201]:
-                print("Storage error:", res.text)
+                print("Storage error:", res.status_code, res.text)
                 return False
 
-            # 公開 URL
-            public_url = f"{SUPABASE_URL}/storage/v1/object/public/icon/{file_name}"
+            # 公開 URL (キャッシュバスター付き)
+            import time
+            timestamp = int(time.time())
+            public_url = f"{SUPABASE_URL}/storage/v1/object/public/icon/{file_name}?t={timestamp}"
 
             # users テーブルを UPDATE
             db_url = f"{SUPABASE_URL}/rest/v1/users"
@@ -439,16 +693,26 @@ class SettingsScreen(Screen):
             payload = {"icon_url": public_url}
             res = requests.patch(db_url, headers=headers, params=params, json=payload)
 
-            if res.status_code == 200:
-                print("アイコン更新成功")
+            # 204 No Content も成功とみなす
+            if res.status_code in [200, 204]:
+                print("✅ アイコン更新成功")
+                print(f"新しいURL: {public_url}")
+                
+                # ローカルの情報も更新
+                self.img_url = public_url
+                
                 return True
             else:
-                print("DB error:", res.text)
+                print(f"DB error: ステータス {res.status_code}")
+                print(f"レスポンス: {res.text}")
                 return False
 
         except Exception as e:
             print("更新失敗:", e)
+            import traceback
+            traceback.print_exc()
             return False
+
 
     def on_back_button(self, window, key, *args):
         if key == 27 and self.manager.current == "settings":
