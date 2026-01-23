@@ -166,7 +166,35 @@ class SettingsScreen(Screen):
 
         except Exception as e:
             print("設定画面のユーザー情報更新エラー:", e)
+            
+    def load_settings(self):
+        if not os.path.exists("settings.json"):
+            return False  # デフォルトOFF
 
+        try:
+            with open("settings.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("meetup_time", False)
+        except Exception as e:
+            print(f"設定読み込みエラー: {e}")
+            return False
+    def save_settings(self, value):
+        data = {
+            "meetup_time": value
+        }
+        try:
+            with open("settings.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            print("✅ settings.json に保存しました")
+        except Exception as e:
+            print(f"設定保存エラー: {e}")
+            
+    def on_switch_active(self, instance, value):
+        if self.initializing:
+            return  # 起動時のactive設定では保存しない
+
+        print(f"待ち合わせ時間 Switch: {value}")
+        self.save_settings(value)
 
 
     def build_ui(self):
@@ -289,24 +317,37 @@ class SettingsScreen(Screen):
         edit_layout.add_widget(inner_layout)
         root_layout.add_widget(edit_layout)
 
-        # 通知
-        root_layout.add_widget(left_label("通知"))
-        notif_layout = GridLayout(
-            cols=2, spacing=Sdp(20), size_hint_y=None, height=Sdp(160)
-        )
-        notif_layout.add_widget(left_label("位置情報関係"))
-        notif_layout.add_widget(Switch(active=True))
-        notif_layout.add_widget(left_label("待ち合わせ時間"))
-        notif_layout.add_widget(Switch(active=False))
-        root_layout.add_widget(notif_layout)
-
         # プライバシー
         root_layout.add_widget(left_label("プライバシー"))
         privacy_layout = GridLayout(
             cols=2, spacing=Sdp(20), size_hint_y=None, height=Sdp(80)
         )
         privacy_layout.add_widget(left_label("位置情報の表示"))
-        privacy_layout.add_widget(Switch(active=True))
+        self.initializing = True
+
+        self.meetup_switch = Switch(active=False)
+
+        # 🔹 保存済みの状態を復元
+        saved_value = self.load_settings()
+        self.meetup_switch.active = saved_value
+
+        self.initializing = False
+
+        # 🔹 状態変化を監視
+        self.meetup_switch.bind(active=self.on_switch_active)
+        self.initializing = True
+
+        self.meetup_switch = Switch(active=False)
+
+        # 🔹 保存済みの状態を復元
+        saved_value = self.load_settings()
+        self.meetup_switch.active = saved_value
+
+        self.initializing = False
+
+        # 🔹 状態変化を監視
+        self.meetup_switch.bind(active=self.on_switch_active)
+        privacy_layout.add_widget(self.meetup_switch)
         root_layout.add_widget(privacy_layout)
 
         # 確定
@@ -352,6 +393,14 @@ class SettingsScreen(Screen):
         """名前編集ボタンが押されたときの処理"""
         print("名前編集ボタンが押されました。編集ダイアログを表示します。")
         self.show_name_edit_dialog()
+        
+    def on_switch_active_priv(self, instance, value):
+        if value:
+            print("プライバシースイッチON")
+        else:
+            print("プライバシースイッチOFF")
+
+
 
     def show_name_edit_dialog(self):
         """名前編集用のポップアップダイアログを表示"""
@@ -362,16 +411,7 @@ class SettingsScreen(Screen):
             spacing=Sdp(15)
         )
         
-        # 説明ラベル
-        label = Label(
-            text='新しい名前を入力してください',
-            font_name='Japanese',
-            size_hint_y=None,
-            height=Sdp(40),
-            color=(0, 0, 0, 1),
-            font_size=Ssp(24)
-        )
-        content.add_widget(label)
+        
         
         # テキスト入力欄
         text_input = TextInput(
@@ -576,6 +616,11 @@ class SettingsScreen(Screen):
 
     def on_submit_press(self, instance):
         print("確定ボタンが押されました。変更内容を確定します。")
+        self.show_success_message("変更内容を確定しました。")
+        if self.app_instance:
+                self.app_instance.back_to_map()
+                return True
+        else: return False
 
     def update_icon_image(self, image_path):
         """設定画面のアイコン画像を更新"""

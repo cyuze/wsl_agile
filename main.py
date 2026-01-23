@@ -22,6 +22,7 @@ from kivy.uix.popup import Popup
 from account import AccountScreen
 from picture import PictureScreen
 from map import MainScreen
+from kivy.clock import Clock
 # settingsは後でインポート（ログイン後にユーザー情報が必要なため）
 import requests
 import json
@@ -301,6 +302,7 @@ class WaitingApp(App):
         self.current_user = None
         self.main_screen = None
         self.screen_manager = None
+        self.current_friend_id = None  # 待ち合わせ対象の友達ID
     
     def build(self):
         self.title = "待ち合わせアプリ"
@@ -315,8 +317,9 @@ class WaitingApp(App):
             class MapScreen(Screen):
                 def __init__(self, app_inst, **kwargs):
                     super().__init__(name="map", **kwargs)
-                    self.main_screen = MainScreen(app_instance=app_inst)
-                    self.add_widget(self.main_screen)
+                    # ★★★ main_screenを保存 ★★★
+                    app_inst.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
+                    self.add_widget(app_inst.main_screen)
             
             map_screen = MapScreen(app_inst=self)
             self.screen_manager.add_widget(map_screen)
@@ -408,8 +411,9 @@ class WaitingApp(App):
                 class MapScreen(Screen):
                     def __init__(self, app_inst, **kwargs):
                         super().__init__(name="map", **kwargs)
-                        self.main_screen = MainScreen(app_instance=app_inst)
-                        self.add_widget(self.main_screen)
+                        # ★★★ main_screenを保存 ★★★
+                        app_inst.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
+                        self.add_widget(app_inst.main_screen)
                 
                 map_screen = MapScreen(app_inst=self)
                 self.root.add_widget(map_screen)
@@ -417,8 +421,39 @@ class WaitingApp(App):
             self.root.current = "map"
         else:
             self.root.clear_widgets()
-            self.main_screen = MainScreen(app_instance=self)
+            self.main_screen = MainScreen(app_instance=self, current_user=self.current_user)
             self.root.add_widget(self.main_screen)
+    
+    def open_location_mode(self, friend_id=None):
+        """場所指定モードを開く - friend_profile.pyから呼ばれる"""
+        print(f"📍 open_location_mode called with friend_id: {friend_id}")
+        print(f"📍 self.main_screen = {self.main_screen}")
+        print(f"📍 self.screen_manager = {self.screen_manager}")
+        
+        # 友達IDを保存
+        if friend_id:
+            self.current_friend_id = friend_id
+            print(f"📍 current_friend_id set to {friend_id}")
+        
+        # map画面に戻る
+        if self.screen_manager:
+            print(f"📍 Switching to map screen")
+            self.screen_manager.current = 'map'
+        
+        # 少し遅延させてから場所指定モードを有効化
+        def enable_mode(dt):
+            print(f"📍 enable_mode callback called")
+            print(f"📍 self.main_screen = {self.main_screen}")
+            if self.main_screen:
+                print(f"📍 Setting is_location_mode = True")
+                self.main_screen.is_location_mode = True
+                if friend_id:
+                    self.main_screen.current_friend_id = friend_id
+                print(f"✅ 場所指定モード ON (is_location_mode={self.main_screen.is_location_mode})")
+            else:
+                print("⚠️ main_screen が見つかりません")
+        
+        Clock.schedule_once(enable_mode, 0.2)
     
     def back_to_login(self):
         """ログイン画面に戻る（ログアウト）"""
@@ -522,7 +557,7 @@ class WaitingApp(App):
         else:
             from map import MainScreen
             self.root.clear_widgets()
-            self.main_screen = MainScreen(app_instance=self)
+            self.main_screen = MainScreen(app_instance=self, current_user=self.current_user)
             self.root.add_widget(self.main_screen)
 
 
@@ -552,6 +587,7 @@ class WaitingApp(App):
                     def __init__(self, friend_id, app_inst, **kwargs):
                         super().__init__(name=screen_name, **kwargs)
                         self.app_inst = app_inst
+                        # ★★★ app_instanceを渡す ★★★
                         profile = FriendProfileScreen(friend_id=friend_id, app_instance=app_inst)
                         self.add_widget(profile)
                         # キーボードイベントをバインド
@@ -560,7 +596,7 @@ class WaitingApp(App):
                     def on_back_button(self, window, key, *args):
                         """戻るボタン処理"""
                         if key == 27 and self.manager and self.manager.current == self.name:
-                            self.manager.current = "account"
+                            self.manager.current = "map"
                             return True
                         return False
                 

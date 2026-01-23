@@ -237,17 +237,12 @@ class MainScreen(FloatLayout):
         btn_chat = ImageButton(
             image_source='img/chat.png',
             size_hint=(None,None), size=(140,140),
-            pos_hint={'center_x':0.4, 'y':0.05}
+            pos_hint={'center_x':0.5, 'y':0.05}
         )
         btn_chat.bind(on_press=self.on_chat_button)
         self.add_widget(btn_chat)
 
 
-        btn_map = ImageButton(image_source='img/map.png',
-                              size_hint=(None,None), size=(140,140),
-                              pos_hint={'center_x':0.6, 'y':0.05})
-        btn_map.bind(on_press=self.on_map_button)
-        self.add_widget(btn_map)
 
         btn_settings = ImageButton(image_source='img/settings.png',
                                    size_hint=(None,None), size=(140,140),

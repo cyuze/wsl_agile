@@ -20,7 +20,7 @@ android.environ = KIVY_NO_SYSTEM_CONFIG=1,KIVY_NO_ARGS=1
 garden_requirements = mapview
 
 # (str) Title of your application
-title = おもまち（仮）
+title = まちちず
 # (str) Package name
 package.name = myapp
 # (str) Package domain (needed for android/ios packaging)
