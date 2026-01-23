@@ -121,11 +121,9 @@ class FriendProfileScreen(Screen):
     def __init__(self, friend_id=None, app_instance=None, **kwargs):
         super().__init__(**kwargs)
 
-        # ← Kivy に渡さず、ここで普通に保持する
         self.friend_id = friend_id
         self.app_instance = app_instance
 
-        # Supabase からユーザー情報取得
         user = get_user_by_id(friend_id)
         if user:
             user_name = user["user_name"]
@@ -134,7 +132,6 @@ class FriendProfileScreen(Screen):
             user_name = "不明なユーザー"
             img_url = "img/default_user.png"
 
-        # 以下 UI =====================================================================
         root_layout = BoxLayout(
             orientation="vertical",
             spacing=Sdp(30),
@@ -145,7 +142,6 @@ class FriendProfileScreen(Screen):
         anchor = AnchorLayout(anchor_x="center", anchor_y="center")
         anchor.add_widget(root_layout)
 
-        # アイコン + 名前
         profile_layout = BoxLayout(
             orientation="horizontal",
             spacing=Sdp(20),
@@ -177,7 +173,6 @@ class FriendProfileScreen(Screen):
 
         root_layout.add_widget(profile_layout)
 
-        # ボタン行1
         row1 = BoxLayout(
             orientation="horizontal",
             spacing=Sdp(60),
@@ -208,7 +203,6 @@ class FriendProfileScreen(Screen):
         row1.add_widget(meet_button)
         root_layout.add_widget(row1)
 
-        # ボタン行2（削除）
         row2 = AnchorLayout(
             anchor_x="left",
             anchor_y="center",
@@ -228,10 +222,8 @@ class FriendProfileScreen(Screen):
         row2.add_widget(del_button)
         root_layout.add_widget(row2)
 
-        # add root
         self.add_widget(anchor)
 
-    # ボタンイベント ======================================================================
     def on_chat_press(self, instance):
         print("チャットを開始（相手ID →", self.friend_id, ")")
         if self.app_instance:
@@ -239,97 +231,17 @@ class FriendProfileScreen(Screen):
 
     def on_meeting_press(self, instance):
         print("待ち合わせ開始：", self.friend_id)
+        if not self.app_instance:
+            print("⚠️ app_instance が見つかりません")
+            return
+        if hasattr(self.app_instance, 'open_location_mode'):
+            self.app_instance.open_location_mode(self.friend_id)
+        else:
+            print("⚠️ open_location_mode メソッドが見つかりません")
 
     def on_delete_press(self, instance):
         print("友達削除：", self.friend_id)
 
-    def on_parent(self, widget, parent):
-        """親がセットされたときに呼ばれる。親スクリーンの manager を取得してバインドする。"""
-        # 親（通常は wrap という Screen）が割り当てられたら、その manager を取得
-        print(f"[DEBUG] FriendProfile.on_parent parent={parent}")
-        if parent:
-            mgr = getattr(parent, "manager", None)
-            # さらに上の祖先を探索して manager を見つける
-            ancestor = parent
-            while mgr is None and getattr(ancestor, "parent", None):
-                ancestor = ancestor.parent
-                mgr = getattr(ancestor, "manager", None)
-
-            if mgr is None:
-                # まだ ScreenManager に追加されていない可能性があるため、少し遅延して再チェック
-                self._deferred_parent = parent
-                Clock.schedule_once(lambda dt: self._deferred_bind(), 0.05)
-                return
-
-            self._mgr = mgr
-            # 戻る先を常に map に固定
-            self.previous_screen = "map"
-
-            # 戻るボタンをバインド
-            print(f"[DEBUG] FriendProfile binding on_keyboard, mgr={mgr}")
-            Window.bind(on_keyboard=self.on_back_button)
-        else:
-            # 親が外れたらバインド解除
-            try:
-                print("[DEBUG] FriendProfile unbinding on_keyboard")
-                Window.unbind(on_keyboard=self.on_back_button)
-            except Exception:
-                pass
-
-    def _deferred_bind(self):
-        """遅延バインド: 親が ScreenManager に追加された後に manager を探してバインドする。"""
-        parent = getattr(self, "_deferred_parent", None)
-        if not parent:
-            return
-        try:
-            mgr = getattr(parent, "manager", None)
-            ancestor = parent
-            while mgr is None and getattr(ancestor, "parent", None):
-                ancestor = ancestor.parent
-                mgr = getattr(ancestor, "manager", None)
-
-            self._mgr = mgr
-            self.previous_screen = "map"
-            print(f"[DEBUG] FriendProfile deferred_bind mgr={mgr}")
-            if mgr:
-                Window.bind(on_keyboard=self.on_back_button)
-        except Exception as e:
-            print("[DEBUG] FriendProfile deferred_bind error:", e)
-
-    def on_back_button(self, window, key, *args):
-        """Android の戻るボタン処理。
-        親スクリーン（または見つかった manager）が現在表示中のとき、previous_screen に戻る。
-        """
-        # key=27 が ESC / Android 戻るボタン
-        print(f"[DEBUG] FriendProfile.on_back_button called: key={key}")
-        if key != 27:
-            return False
-
-        mgr = getattr(self, "_mgr", None) or getattr(self, "manager", None)
-        # 親経由で manager を再取得しておく
-        if mgr is None and getattr(self, "parent", None):
-            mgr = getattr(self.parent, "manager", None)
-
-        print(f"[DEBUG] FriendProfile on_back_button mgr={mgr}, parent={getattr(self,'parent',None)}")
-        if mgr:
-            # もし現在表示中のスクリーンがこの FriendProfile を含むスクリーンなら戻る
-            current = getattr(mgr, "current", None)
-            # 親スクリーン名が存在すればそれを確認、なければこのスクリーンの name を確認
-            parent_name = getattr(self.parent, "name", None) if getattr(self, "parent", None) else None
-            print(f"[DEBUG] FriendProfile on_back_button current={current}, parent_name={parent_name}, self.name={getattr(self,'name',None)}")
-            if (parent_name and current == parent_name) or (getattr(self, "name", None) and current == self.name):
-                try:
-                    mgr.current = getattr(self, "previous_screen", "account")
-                except Exception:
-                    mgr.current = "account"
-                return True
-
-        return False
-
-
-class FriendProfileApp(App):
-    def build(self):
-        return FriendProfileScreen()
 
 if __name__ == "__main__":
-    FriendProfileApp().run()
+    App().run()
