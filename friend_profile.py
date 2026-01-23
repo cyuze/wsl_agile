@@ -239,6 +239,8 @@ class FriendProfileScreen(Screen):
 
     def on_meeting_press(self, instance):
         print("待ち合わせ開始：", self.friend_id)
+        if self.app_instance:
+            self.app_instance.open_meeting_map(friend_id=self.friend_id)
 
     def on_delete_press(self, instance):
         print("友達削除：", self.friend_id)
