@@ -8,6 +8,12 @@ from kivy.uix.stencilview import StencilView
 from kivy.core.window import Window
 from kivy.config import Config
 from kivy.clock import Clock
+from kivy.core.text import LabelBase
+from kivy.metrics import dp, sp
+from kivy.uix.label import Label
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.screenmanager import Screen
 import random
 import requests
 import json
@@ -23,6 +29,19 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import AsyncImage
 from kivy.graphics import Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop
 from personal_chat_screen import ChatScreen
+
+# 日本語フォント登録
+LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
+Window.clearcolor = (236/255, 244/255, 232/255, 1)
+
+# UI スケーリング
+scale = Window.dpi / 120.0
+
+def Sdp(v):
+    return dp(v * scale)
+
+def Ssp(v):
+    return sp(v * scale)
 
 
 # Android 権限
@@ -186,69 +205,247 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
 
 
 class ImageButton(ButtonBehavior, FloatLayout):
-    def __init__(self, image_source, **kwargs):
+    def __init__(self, image_source, text='', **kwargs):
         super().__init__(**kwargs)
         with self.canvas.before:
             Color(0.671,0.905,0.510,1)
             self.bg = RoundedRectangle(size=self.size,pos=self.pos,radius=[12])
         self.bind(pos=self._update_bg, size=self._update_bg)
-        self.icon = Image(source=image_source,size_hint=(None,None),size=(50,50),pos_hint={'center_x':0.5,'center_y':0.5})
-        self.add_widget(self.icon)
+        
+        # テキストラベルを追加
+        if text:
+            self.label = Label(
+                text=text,
+                size_hint=(1, 1),
+                pos_hint={'center_x': 0.5, 'center_y': 0.5},
+                font_size=Ssp(16),
+                font_name="Japanese",
+                bold=True,
+                color=(0, 0, 0, 1)
+            )
+            self.add_widget(self.label)
+        else:
+            self.icon = Image(source=image_source,size_hint=(None,None),size=(50,50),pos_hint={'center_x':0.5,'center_y':0.5})
+            self.add_widget(self.icon)
     def _update_bg(self,*args):
         self.bg.size = self.size
         self.bg.pos = self.pos
 
 # ===============================================================
+# 場所を指定する画面
+# ===============================================================
+class SpecifyLocationScreen(FloatLayout):
+    def __init__(self, app_instance=None, **kwargs):
+        super().__init__(**kwargs)
+        self.app_instance = app_instance
+        Window.clearcolor = (1, 1, 1, 1)
+        
+        # Mapbox設定
+        self.MAPBOX_TOKEN = "pk.eyJ1IjoieXV6ZXdpbmctbWFwIiwiYSI6ImNtNXoybHEyMjAycDYycXBsdHN3ZW1pYmcifQ.KKFTfVHvZvVOOj_3kQpvVw"
+        self.selected_location = None
+        
+        # タイトル
+        title = Label(
+            text='場所を指定する',
+            size_hint=(1, 0.1),
+            pos_hint={'x': 0, 'y': 0.9},
+            font_size=Ssp(24),
+            font_name="Japanese",
+            bold=True
+        )
+        self.add_widget(title)
+        
+        # マップ
+        self.mapview = MapView(lat=35.6762, lon=139.6503, zoom=14, map_source=GSImapSource())
+        self.mapview.size_hint = (1, 0.8)
+        self.mapview.pos_hint = {'x': 0, 'y': 0.1}
+        self.mapview.bind(on_touch_down=self.on_map_touch)
+        self.add_widget(self.mapview)
+        
+        # 情報表示エリア
+        self.info_label = Label(
+            text='マップをタップして場所を指定してください',
+            size_hint=(1, 0.05),
+            pos_hint={'x': 0, 'y': 0.05},
+            font_size=Ssp(14),
+            font_name="Japanese",
+            color=(0, 0, 0, 1)
+        )
+        self.add_widget(self.info_label)
+        
+        # ========================
+        # 下部2つのボタン（指定する / 共有する）
+        # ========================
+        btn_specify = ImageButton(
+            image_source='',
+            text='指定する',
+            size_hint=(None, None),
+            size=(140, 140),
+            pos_hint={'x': 0.1, 'y': 0.02}
+        )
+        btn_specify.bind(on_press=self.on_specify_button)
+        self.add_widget(btn_specify)
+        
+        btn_share = ImageButton(
+            image_source='',
+            text='共有する',
+            size_hint=(None, None),
+            size=(140, 140),
+            pos_hint={'x': 0.6, 'y': 0.02}
+        )
+        btn_share.bind(on_press=self.on_share_button)
+        self.add_widget(btn_share)
+    
+    def on_map_touch(self, mapview, touch):
+        """マップがタップされた時の処理"""
+        if mapview.collide_point(*touch.pos):
+            # マップ上のタッチ位置を地理座標に変換
+            lat, lon = mapview.get_latlon_at(touch.pos[0], touch.pos[1])
+            print(f"📍 タップ位置: 緯度={lat:.6f}, 経度={lon:.6f}")
+            
+            self.selected_location = (lat, lon)
+            
+            # マーカーを追加
+            if hasattr(self, 'tap_marker'):
+                self.mapview.remove_marker(self.tap_marker)
+            self.tap_marker = MapMarker(lat=lat, lon=lon, source="img/pin.png")
+            self.mapview.add_marker(self.tap_marker)
+            
+            # Mapbox APIで建物情報を取得
+            Clock.schedule_once(lambda dt: self.fetch_location_info(lat, lon), 0)
+            
+            return True
+        return False
+    
+    def fetch_location_info(self, lat, lon):
+        """Mapbox Geocoding APIで位置情報を取得"""
+        try:
+            url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{lon},{lat}.json"
+            params = {
+                "access_token": self.MAPBOX_TOKEN,
+                "language": "ja"
+            }
+            
+            response = requests.get(url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                
+                # 建物情報を抽出
+                features = data.get('features', [])
+                if features:
+                    # 最初の結果（最も詳細）を使用
+                    place_name = features[0].get('place_name', '不明')
+                    address_parts = []
+                    
+                    for feature in features[:3]:  # 上位3件を取得
+                        address_parts.append(feature.get('place_name', ''))
+                    
+                    info_text = "住所: " + " / ".join(address_parts)
+                else:
+                    info_text = f"座標: 緯度 {lat:.6f}, 経度 {lon:.6f}"
+                
+                self.info_label.text = info_text
+                print(f"✅ 建物情報取得成功: {info_text}")
+            else:
+                self.info_label.text = f"座標: 緯度 {lat:.6f}, 経度 {lon:.6f}"
+                print(f"⚠️ Mapbox APIエラー: {response.status_code}")
+        except Exception as e:
+            self.info_label.text = f"エラー: {str(e)}"
+            print(f"❌ 情報取得エラー: {e}")
+    
+    def on_specify_button(self, instance):
+        print("📍 指定するボタンが押されました")
+        if self.selected_location:
+            print(f"指定された場所: {self.selected_location}")
+        # TODO: 指定する処理を実装
+        if self.app_instance:
+            self.app_instance.back_to_map()
+    
+    def on_share_button(self, instance):
+        print("📤 共有するボタンが押されました")
+        # TODO: 共有する処理を実装
+
+# ===============================================================
 # メイン画面
 # ===============================================================
-class MainScreen(FloatLayout):
-    def __init__(self, app_instance=None, current_user=None, **kwargs):  # current_user を追加
+class MainScreen(Screen):
+    def __init__(self, app_instance=None, current_user=None, friend_id=None, **kwargs):  # current_user と friend_id を追加
         super().__init__(**kwargs)
         self.app_instance = app_instance
         self.current_user = current_user
+        self.friend_id = friend_id  # 待ち合わせ相手のfriend_idを保存
         Window.clearcolor = (1,1,1,1)
 
         # ユーザーのIDを取得
         self.user_id = current_user.get("user_id") if current_user else None
-        print(f"🔍 DEBUG: MainScreen initialized with user_id = {self.user_id}")
+        print(f"🔍 DEBUG: MainScreen initialized with user_id = {self.user_id}, friend_id = {self.friend_id}")
 
         self.friend_meetings = {}
         self.friend_markers = {}
         self.friend_icons = {}
         self.my_marker = None
+        
+        self.is_selecting_location = False
+        self.selected_location_info = None
+        
+        # キーボードイベントをバインド
+        Window.bind(on_keyboard=self.on_back_button)
 
         # ログイン時に位置情報を初期化
         self.initialize_user_location_on_open()
 
         # MapView - 初期座標はGPS取得後に設定
         self.mapview = MapView(lat=35.6762, lon=139.6503, zoom=14, map_source=GSImapSource())  # 初期値：東京都
+        self.mapview.bind(on_touch_down=self.on_map_touch)
         self.add_widget(self.mapview)
         self.map_center_updated = False  # マップの中心が更新されたかどうかのフラグ
 
         # ========================
-        # 4つのボタン
+        # 指定した場所の情報表示エリア
         # ========================
-        btn_friend = ImageButton(image_source='img/friend.png',
-                                 size_hint=(None,None), size=(140,140),
-                                 pos_hint={'center_x':0.2, 'y':0.05})
-        btn_friend.bind(on_press=self.on_friend_button)
-        self.add_widget(btn_friend)
-
-        btn_chat = ImageButton(
-            image_source='img/chat.png',
-            size_hint=(None,None), size=(140,140),
-            pos_hint={'center_x':0.5, 'y':0.05}
+        info_scroll = ScrollView(
+            size_hint=(0.95, 0.15),
+            pos_hint={'center_x': 0.5, 'y': 0.22},
+            do_scroll_x=True,
+            do_scroll_y=False
         )
-        btn_chat.bind(on_press=self.on_chat_button)
-        self.add_widget(btn_chat)
+        
+        self.location_info_label = Label(
+            text='',
+            size_hint_x=None,
+            size_hint_y=1,
+            width=2000,
+            font_size=Ssp(14),
+            font_name="Japanese",
+            color=(0, 0, 0, 1),
+            text_size=(1900, None),
+            padding=(Sdp(10), Sdp(5))
+        )
+        info_scroll.add_widget(self.location_info_label)
+        self.add_widget(info_scroll)
 
+        # ========================
+        # 下部2つのボタン（指定する / 共有する）
+        # ========================
+        btn_specify = ImageButton(
+            image_source='',
+            text='指定する',
+            size_hint=(None, None),
+            size=(140, 140),
+            pos_hint={'x':0.1, 'y':0.02}
+        )
+        btn_specify.bind(on_press=self.on_specify_button)
+        self.add_widget(btn_specify)
 
-
-        btn_settings = ImageButton(image_source='img/settings.png',
-                                   size_hint=(None,None), size=(140,140),
-                                   pos_hint={'center_x':0.8, 'y':0.05})
-        btn_settings.bind(on_press=self.on_settings_button)
-        self.add_widget(btn_settings)
+        btn_share = ImageButton(
+            image_source='',
+            text='共有する',
+            size_hint=(None, None),
+            size=(140, 140),
+            pos_hint={'x':0.6, 'y':0.02}
+        )
+        btn_share.bind(on_press=self.on_share_button)
+        self.add_widget(btn_share)
 
         # ========================
         # GPS / デバッグモード
@@ -339,23 +536,125 @@ class MainScreen(FloatLayout):
     # ======================================
     # 4つのボタン処理
     # ======================================
-    def on_friend_button(self, instance):
-        print("💬 友達が押されました")
-        if self.app_instance:  # この行を追加
-            self.app_instance.open_friend_addition()  # この行を追加
+    def on_specify_button(self, instance):
+        print("📍 指定するボタンが押されました")
+        self.is_selecting_location = not self.is_selecting_location
+        if self.is_selecting_location:
+            self.location_info_label.text = "マップをタップして場所を指定してください"
+        else:
+            self.location_info_label.text = ""
 
-    def on_chat_button(self, instance):
-        print("💬 チャットボタンが押されました")
-        if self.app_instance:  # この行を追加
-            self.app_instance.open_chat_list()  # この行を追加
+    def on_share_button(self, instance):
+        print("📤 共有するボタンが押されました")
+        self.is_selecting_location = False
+        self.location_info_label.text = ""
+        # TODO: 共有する機能を実装
+    
+    def on_back_button(self, window, key, *args):
+        """ESCキーまたはAndroidの戻るボタン処理"""
+        # key=27 が ESC / Android 戻るボタン
+        if key != 27:
+            return False
+        
+        print("[DEBUG] map2.py on_back_button called")
+        
+        if self.manager:
+            # 前の画面（フレンドプロフィール）に戻る
+            try:
+                # friend_profileスクリーンを探して戻る
+                for screen in self.manager.screens:
+                    if 'friend_profile' in screen.name:
+                        self.manager.current = screen.name
+                        return True
+            except:
+                pass
+        
+        # フォールバック：親のback_to_mapメソッドを使用
+        if self.app_instance and hasattr(self.app_instance, 'back_to_map'):
+            self.app_instance.back_to_map()
+            return True
+        
+        return False
+    
+    def on_leave(self):
+        """画面を離脱するときにキーボードイベントのバインドを解除"""
+        try:
+            Window.unbind(on_keyboard=self.on_back_button)
+        except:
+            pass
 
-    def on_map_button(self, instance):
-        print("🗺️ マップボタンが押されました")
+    def on_map_touch(self, mapview, touch):
+        """マップがタップされた時の処理"""
+        if not self.is_selecting_location:
+            return False
+        
+        if mapview.collide_point(*touch.pos):
+            # マップ上のタッチ位置を地理座標に変換
+            lat, lon = mapview.get_latlon_at(touch.pos[0], touch.pos[1])
+            print(f"📍 タップ位置: 緯度={lat:.6f}, 経度={lon:.6f}")
+            
+            # Nominatim APIで建物情報を取得
+            Clock.schedule_once(lambda dt: self.fetch_location_info(lat, lon), 0)
+            
+            return True
+        return False
 
-    def on_settings_button(self, instance):
-        print("⚙️ 設定ボタンが押されました")
-        if self.app_instance:
-            self.app_instance.open_settings()
+    def fetch_location_info(self, lat, lon):
+        """Nominatim APIで位置情報を取得"""
+        try:
+            url = f"https://nominatim.openstreetmap.org/reverse"
+            params = {
+                "format": "json",
+                "lat": lat,
+                "lon": lon,
+                "language": "ja"
+            }
+            headers = {
+                "User-Agent": "MyLocationApp/1.0"
+            }
+            
+            response = requests.get(url, params=params, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                
+                # 建物情報を抽出
+                address = data.get('address', {})
+                
+                # 日本語での詳細な住所情報を組み立てる
+                info_parts = []
+                
+                # 都道府県
+                if 'state' in address:
+                    info_parts.append(address['state'])
+                
+                # 市区町村
+                if 'city' in address:
+                    info_parts.append(address['city'])
+                elif 'county' in address:
+                    info_parts.append(address['county'])
+                
+                # 町丁目
+                if 'suburb' in address:
+                    info_parts.append(address['suburb'])
+                
+                # 建物名やPOI
+                if 'name' in data and data['name'] != address.get('city'):
+                    info_parts.append(data['name'])
+                
+                if info_parts:
+                    info_text = " / ".join(info_parts)
+                else:
+                    info_text = f"座標: 緯度 {lat:.6f}, 経度 {lon:.6f}"
+                
+                self.location_info_label.text = info_text
+                self.selected_location_info = (lat, lon)
+                print(f"✅ 建物情報取得成功: {info_text}")
+            else:
+                self.location_info_label.text = f"座標: 緯度 {lat:.6f}, 経度 {lon:.6f}"
+                print(f"⚠️ Nominatim APIエラー: {response.status_code}")
+        except Exception as e:
+            self.location_info_label.text = f"エラー: {str(e)}"
+            print(f"❌ 情報取得エラー: {e}")
 
 
     # ===========================================================
@@ -628,6 +927,16 @@ class MyApp(App):
         profile_screen = FriendProfileScreen(friend_id=friend_id, app_instance=self)
         self.root.add_widget(profile_screen)
     
+    def open_specify_location(self):
+        """場所を指定する画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        self.root.clear_widgets()
+        specify_screen = SpecifyLocationScreen(app_instance=self)
+        self.root.add_widget(specify_screen)
+    
     def open_meeting_map(self, friend_id):
         """待ち合わせ用のマップ画面を開く"""
         # 定期処理を停止
@@ -635,7 +944,7 @@ class MyApp(App):
             self.main_screen.stop_updates()
         
         self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self, friend_id=friend_id)
+        self.main_screen = MainScreen(app_instance=self)
         self.root.add_widget(self.main_screen)
         print(f"🗺️ 友人 {friend_id} との待ち合わせ場所を指定してください")
     
