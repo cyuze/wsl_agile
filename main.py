@@ -574,21 +574,21 @@ class WaitingApp(App):
 
             
     
-    def open_friend_profile(self, friend_id):
+    def open_friend_profile(self, friend_mail):
         """フレンドプロフィール画面を開く"""
         from friend_profile import FriendProfileScreen
         from kivy.core.window import Window
         
         if isinstance(self.root, ScreenManager):
-            screen_name = f"friend_profile_{friend_id}"
+            screen_name = f"friend_profile_{friend_mail}"
             
             if not self.root.has_screen(screen_name):
                 class FriendProfileWrap(Screen):
-                    def __init__(self, friend_id, app_inst, **kwargs):
+                    def __init__(self, friend_mail, app_inst, **kwargs):
                         super().__init__(name=screen_name, **kwargs)
                         self.app_inst = app_inst
                         # ★★★ app_instanceを渡す ★★★
-                        profile = FriendProfileScreen(friend_id=friend_id, app_instance=app_inst)
+                        profile = FriendProfileScreen(friend_mail=friend_mail, app_instance=app_inst)
                         self.add_widget(profile)
                         # キーボードイベントをバインド
                         Window.bind(on_keyboard=self.on_back_button)
@@ -600,7 +600,7 @@ class WaitingApp(App):
                             return True
                         return False
                 
-                new_screen = FriendProfileWrap(friend_id, app_inst=self)
+                new_screen = FriendProfileWrap(friend_mail, app_inst=self)
                 self.root.add_widget(new_screen)
             
             self.root.current = screen_name
