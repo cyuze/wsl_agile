@@ -99,10 +99,10 @@ class CircleImageView(ButtonBehavior, StencilView):
 # ===============================================================
 
 class FriendMarker(MapMarker):
-    def __init__(self, lat, lon, icon_url, friend_id, app_instance, **kwargs):
+    def __init__(self, lat, lon, icon_url, friend_mail, app_instance, **kwargs):
         super().__init__(lat=lat, lon=lon, **kwargs)
 
-        self.friend_id = friend_id
+        self.friend_mail = friend_mail
         self.app_instance = app_instance
         self.offset_angle = 0  # アイコンのオフセット角度（度）
         self.offset_distance = 0  # オフセット距離（ピクセル）
@@ -110,7 +110,7 @@ class FriendMarker(MapMarker):
         # コンテナ（ボタン + 丸画像）
         self.container = FriendIconButton(
             icon_url=icon_url,
-            friend_id=friend_id,
+            friend_mail=friend_mail,
             app_instance=app_instance
         )
         self.add_widget(self.container)
@@ -145,11 +145,11 @@ class FriendMarker(MapMarker):
 # 背景付き画像ボタン
 # ===============================================================
 class FriendIconButton(ButtonBehavior, FloatLayout):
-    def __init__(self, icon_url, friend_id, app_instance, **kwargs):
+    def __init__(self, icon_url, friend_mail, app_instance, **kwargs):
         super().__init__(**kwargs)
 
         self.size = (100, 100)
-        self.friend_id = friend_id
+        self.friend_mail = friend_mail
         self.app_instance = app_instance
 
         # 丸マスク
@@ -180,9 +180,9 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
         self.image.size = self.size
 
     def on_press(self):
-        print("🧑 フレンドアイコン押された:", self.friend_id)
+        print("🧑 フレンドアイコン押された:", self.friend_mail)
         if self.app_instance:
-            self.app_instance.open_friend_profile(self.friend_id)
+            self.app_instance.open_friend_profile(self.friend_mail)
 
 
 class ImageButton(ButtonBehavior, FloatLayout):
@@ -202,15 +202,16 @@ class ImageButton(ButtonBehavior, FloatLayout):
 # メイン画面
 # ===============================================================
 class MainScreen(FloatLayout):
-    def __init__(self, app_instance=None, current_user=None, **kwargs):  # current_user を追加
+    def __init__(self, app_instance=None, current_user=None, friend_mail=None, **kwargs):  # friend_mail を追加
         super().__init__(**kwargs)
         self.app_instance = app_instance
         self.current_user = current_user
+        self.friend_mail = friend_mail  # 待ち合わせ相手のfriend_mailを保存
         Window.clearcolor = (1,1,1,1)
 
         # ユーザーのIDを取得
         self.user_id = current_user.get("user_id") if current_user else None
-        print(f"🔍 DEBUG: MainScreen initialized with user_id = {self.user_id}")
+        print(f"🔍 DEBUG: MainScreen initialized with user_id = {self.user_id}, friend_mail = {self.friend_mail}")
 
         self.friend_meetings = {}
         self.friend_markers = {}
@@ -475,10 +476,8 @@ class MainScreen(FloatLayout):
                 print(f"🔍 DEBUG: Friend {friend_mail} location = {location}")
                 if location:
                     lat, lon = location
-                    # user_idが必要なため、メールからuser_idを取得
-                    friend_user_id = get_user_id_by_mail(friend_mail)
-                    if friend_user_id:
-                        self.update_friend_marker(friend_user_id, lat, lon)
+                    # friend_mailを直接使用してマーカーを更新
+                    self.update_friend_marker(friend_mail, lat, lon)
         except Exception as e:
             print(f"⚠️ update_friends error: {e}")
 
@@ -486,22 +485,22 @@ class MainScreen(FloatLayout):
 
 
 
-    def update_friend_marker(self, friend_id, lat, lon):
+    def update_friend_marker(self, friend_mail, lat, lon):
         """フレンドのマーカーを更新または作成"""
-        if friend_id in self.friend_markers:
-            marker = self.friend_markers[friend_id]
+        if friend_mail in self.friend_markers:
+            marker = self.friend_markers[friend_mail]
             marker.lat = lat
             marker.lon = lon
         else:
-            icon_url = fetch_friend_icon(friend_id) or "img/cat_placeholder.png"
+            icon_url = fetch_friend_icon(friend_mail) or "img/cat_placeholder.png"
 
             marker = FriendMarker(
                 lat, lon, icon_url,
-                friend_id, self.app_instance
+                friend_mail, self.app_instance
             )
 
             self.mapview.add_marker(marker)
-            self.friend_markers[friend_id] = marker
+            self.friend_markers[friend_mail] = marker
         
         # 近くのマーカーをチェックしてオフセットを調整
         self.adjust_marker_offsets()
@@ -617,7 +616,7 @@ class MyApp(App):
         settings_screen = SettingsScreen(app_instance=self)
         self.root.add_widget(settings_screen)
         
-    def open_friend_profile(self, friend_id):
+    def open_friend_profile(self, friend_mail):
         """フレンドプロフィール画面を開く"""
         # 定期処理を停止
         if hasattr(self, 'main_screen'):
@@ -625,19 +624,19 @@ class MyApp(App):
         
         from friend_profile import FriendProfileScreen  # friend_profile.pyからインポート
         self.root.clear_widgets()
-        profile_screen = FriendProfileScreen(friend_id=friend_id, app_instance=self)
+        profile_screen = FriendProfileScreen(friend_mail=friend_mail, app_instance=self)
         self.root.add_widget(profile_screen)
     
-    def open_meeting_map(self, friend_id):
+    def open_meeting_map(self, friend_mail):
         """待ち合わせ用のマップ画面を開く"""
         # 定期処理を停止
         if hasattr(self, 'main_screen'):
             self.main_screen.stop_updates()
         
         self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self, friend_id=friend_id)
+        self.main_screen = MainScreen(app_instance=self, friend_mail=friend_mail)
         self.root.add_widget(self.main_screen)
-        print(f"🗺️ 友人 {friend_id} との待ち合わせ場所を指定してください")
+        print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
     
 
 if __name__ == '__main__':
