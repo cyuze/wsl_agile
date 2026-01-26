@@ -28,10 +28,10 @@ headers = {
 }
 
 
-def get_user_by_id(user_id: str):
-    """user_id から Supabase users テーブルを検索"""
+def get_user_by_mail(user_mail: str):
+    """user_mail から Supabase users テーブルを検索"""
     url = f"{SUPABASE_URL}/rest/v1/users"
-    params = {"user_id": f"eq.{user_id}", "select": "*"}
+    params = {"user_mail": f"eq.{user_mail}", "select": "*"}
     r = requests.get(url, headers=headers, params=params)
 
     if r.status_code != 200:
@@ -118,13 +118,13 @@ class RoundedButton(Button):
 
 # Profile Screen ==========================================================================
 class FriendProfileScreen(Screen):
-    def __init__(self, friend_id=None, app_instance=None, **kwargs):
+    def __init__(self, friend_mail=None, app_instance=None, **kwargs):
         super().__init__(**kwargs)
 
-        self.friend_id = friend_id
+        self.friend_mail = friend_mail
         self.app_instance = app_instance
 
-        user = get_user_by_id(friend_id)
+        user = get_user_by_mail(friend_mail)
         if user:
             user_name = user["user_name"]
             img_url = user["icon_url"]
@@ -225,22 +225,22 @@ class FriendProfileScreen(Screen):
         self.add_widget(anchor)
 
     def on_chat_press(self, instance):
-        print("チャットを開始（相手ID →", self.friend_id, ")")
+        print("チャットを開始（相手メール →", self.friend_mail, ")")
         if self.app_instance:
-            self.app_instance.open_chat("MY_ID", self.friend_id)
+            self.app_instance.open_chat("MY_MAIL", self.friend_mail)
 
     def on_meeting_press(self, instance):
-        print("待ち合わせ開始：", self.friend_id)
+        print("待ち合わせ開始：", self.friend_mail)
         if not self.app_instance:
             print("⚠️ app_instance が見つかりません")
             return
-        if hasattr(self.app_instance, 'open_location_mode'):
-            self.app_instance.open_location_mode(self.friend_id)
+        if hasattr(self.app_instance, 'open_meeting_map'):
+            self.app_instance.open_meeting_map(self.friend_mail)
         else:
-            print("⚠️ open_location_mode メソッドが見つかりません")
+            print("⚠️ open_meeting_map メソッドが見つかりません")
 
     def on_delete_press(self, instance):
-        print("友達削除：", self.friend_id)
+        print("友達削除：", self.friend_mail)
 
 
 if __name__ == "__main__":
