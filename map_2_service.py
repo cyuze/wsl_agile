@@ -227,10 +227,13 @@ def fetch_friend_icon(friend_id):
     try:
         res = requests.get(url, headers=headers)
         data = res.json()
+        print(f"🔍 fetch_friend_icon({friend_id}): response = {data}")
         if data:
-            return data[0].get("icon_url")
+            icon_url = data[0].get("icon_url")
+            print(f"📷 Found icon_url for {friend_id}: {icon_url}")
+            return icon_url
     except Exception as e:
-        print("⚠️ map_service.fetch_friend_icon:", e)
+        print("⚠️ map_2_service.fetch_friend_icon:", e)
     return None
 
 
@@ -243,13 +246,13 @@ def get_friend_mail(friend_id):
     Returns:
         メールアドレス、または None
     """
-    url = f"{SUPABASE_URL}/rest/v1/users?select=mail&user_id=eq.{friend_id}"
+    url = f"{SUPABASE_URL}/rest/v1/users?select=user_mail&user_id=eq.{friend_id}"
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
         res = requests.get(url, headers=headers)
         data = res.json()
         if data:
-            return data[0].get("mail")
+            return data[0].get("user_mail")
     except Exception as e:
         print("⚠️ map_service.get_friend_mail:", e)
     return None
@@ -364,3 +367,213 @@ def save_my_location(gps):
     except Exception as e:
         print("⚠️ map_service.save_my_location:", e)
     return False
+
+
+def save_meeting(lat, lon, place_name=None):
+    """meetingsテーブルにデータを保存
+    
+    Args:
+        lat: 緯度
+        lon: 経度
+        place_name: 場所の名前（建物名のみ）、Noneの場合はnullで保存
+    
+    Returns:
+        meeting_id（UUID）、または None
+    """
+    print(f"")
+    print(f"=" * 60)
+    print(f"🏁 save_meeting() 開始")
+    print(f"=" * 60)
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/meetings"
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        
+        # location形式: 複数の形式を試せるように準備
+        # PostgreSQL point型の場合: (lon,lat) または "(lon,lat)"
+        # text型の場合: "{lat,lon}" または "lat,lon"
+        location_value = "{" + f"{lat},{lon}" + "}"  # デフォルト形式
+        
+        payload = {
+            "location": location_value,
+            "place_name": place_name if place_name else None,
+            "status": True
+        }
+        
+        print(f"📝 送信データ:")
+        print(f"   - location: {payload['location']} (形式: text配列)")
+        print(f"   - place_name: {payload['place_name']}")
+        print(f"   - status: {payload['status']}")
+        print(f"📤 meetingsテーブルへPOST送信中...")
+        
+        res = requests.post(url, headers=headers, data=json.dumps(payload))
+        
+        print(f"📥 レスポンス受信:")
+        print(f"   - status_code: {res.status_code}")
+        print(f"   - response: {res.text[:200]}")  # 最初の200文字
+        
+        if res.status_code in (200, 201):
+            data = res.json()
+            print(f"✅ POSTリクエスト成功")
+            print(f"   - データ型: {type(data)}")
+            print(f"   - データ内容: {data}")
+            
+            # レスポンスがリスト形式の場合と単一オブジェクト形式に対応
+            if isinstance(data, list):
+                if len(data) > 0:
+                    meeting_id = data[0].get("id")
+                    print(f"   - リスト形式のレスポンス、最初の要素からID取得")
+                else:
+                    print(f"❌ レスポンスが空のリスト")
+                    return None
+            else:
+                meeting_id = data.get("id")
+                print(f"   - オブジェクト形式のレスポンス、IDを直接取得")
+            
+            if meeting_id:
+                print(f"")
+                print(f"🎉 meetingsテーブルへの保存成功!")
+                print(f"   - meeting_id: {meeting_id}")
+                print(f"   - 座標: ({lat:.6f}, {lon:.6f})")
+                print(f"=" * 60)
+                return meeting_id
+            else:
+                print(f"❌ レスポンスにIDが含まれていません: {data}")
+                print(f"=" * 60)
+                return None
+        else:
+            print(f"❌ POSTリクエスト失敗")
+            print(f"   - status_code: {res.status_code}")
+            print(f"   - エラー内容: {res.text}")
+            print(f"=" * 60)
+            return None
+    except Exception as e:
+        print(f"❌ save_meeting() で例外発生: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"=" * 60)
+        return None
+
+
+def save_meeting_shares(user_mail, meeting_id):
+    """meeting_sharesテーブルにデータを保存
+    
+    Args:
+        user_mail: ユーザーのメールアドレス
+        meeting_id: meetings テーブルの ID
+    
+    Returns:
+        True: 保存成功、False: エラー
+    """
+    print(f"")
+    print(f"=" * 60)
+    print(f"🏁 save_meeting_shares() 開始")
+    print(f"=" * 60)
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/meeting_shares"
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        
+        payload = {
+            "user_mail": user_mail,
+            "meeting_id": meeting_id,
+            "status": True
+        }
+        
+        print(f"📝 送信データ:")
+        print(f"   - user_mail: {payload['user_mail']}")
+        print(f"   - meeting_id: {payload['meeting_id']}")
+        print(f"   - status: {payload['status']}")
+        print(f"📤 meeting_sharesテーブルへPOST送信中...")
+        
+        res = requests.post(url, headers=headers, data=json.dumps(payload))
+        
+        print(f"📥 レスポンス受信:")
+        print(f"   - status_code: {res.status_code}")
+        print(f"   - response: {res.text[:200]}")  # 最初の200文字
+        
+        if res.status_code in (200, 201):
+            print(f"")
+            print(f"🎉 meeting_sharesテーブルへの保存成功!")
+            print(f"   - user_mail: {user_mail}")
+            print(f"   - meeting_id: {meeting_id}")
+            print(f"=" * 60)
+            return True
+        else:
+            print(f"❌ POSTリクエスト失敗")
+            print(f"   - status_code: {res.status_code}")
+            print(f"   - エラー内容: {res.text}")
+            print(f"=" * 60)
+            return False
+    except Exception as e:
+        print(f"❌ save_meeting_shares() で例外発生: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"=" * 60)
+        return False
+
+
+def check_meeting_shares_status(user_mail):
+    """meeting_sharesテーブルで、user_mailでステータスがtrueのものが存在するか確認
+    
+    Args:
+        user_mail: ユーザーのメールアドレス
+    
+    Returns:
+        True: 存在する、False: 存在しない
+    """
+    print(f"")
+    print(f"=" * 60)
+    print(f"🏁 check_meeting_shares_status() 開始")
+    print(f"=" * 60)
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/meeting_shares"
+        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+        params = {
+            "select": "id",
+            "user_mail": f"eq.{user_mail}",
+            "status": "eq.true"
+        }
+        
+        print(f"📝 検索条件:")
+        print(f"   - user_mail: {user_mail}")
+        print(f"   - status: true")
+        print(f"📤 meeting_sharesテーブルへGET送信中...")
+        
+        res = requests.get(url, headers=headers, params=params)
+        
+        print(f"📥 レスポンス受信:")
+        print(f"   - status_code: {res.status_code}")
+        
+        if res.status_code == 200:
+            data = res.json()
+            has_active = len(data) > 0
+            print(f"   - 取得件数: {len(data)}件")
+            print(f"")
+            if has_active:
+                print(f"✅ アクティブなミーティング共有が存在します")
+            else:
+                print(f"ℹ️  アクティブなミーティング共有は存在しません")
+            print(f"   - 結果: {has_active}")
+            print(f"=" * 60)
+            return has_active
+        else:
+            print(f"❌ GETリクエスト失敗")
+            print(f"   - status_code: {res.status_code}")
+            print(f"=" * 60)
+            return False
+    except Exception as e:
+        print(f"❌ check_meeting_shares_status() で例外発生: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"=" * 60)
+        return False
+

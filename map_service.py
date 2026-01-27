@@ -243,13 +243,13 @@ def get_friend_mail(friend_id):
     Returns:
         メールアドレス、または None
     """
-    url = f"{SUPABASE_URL}/rest/v1/users?select=mail&user_id=eq.{friend_id}"
+    url = f"{SUPABASE_URL}/rest/v1/users?select=user_mail&user_id=eq.{friend_id}"
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
         res = requests.get(url, headers=headers)
         data = res.json()
         if data:
-            return data[0].get("mail")
+            return data[0].get("user_mail")
     except Exception as e:
         print("⚠️ map_service.get_friend_mail:", e)
     return None
