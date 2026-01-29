@@ -21,6 +21,7 @@ import threading
 from map_service import (save_my_location, fetch_friends, fetch_friend_icon, 
                         get_friend_mail, fetch_friend_location, initialize_user_location, 
                         fetch_friends_by_mail, get_user_id_by_mail)
+from map_2_service import save_meeting, save_meeting_shares, check_meeting_shares_status
 from chat_screen import MainLayout  # この行を追加
 from settings import SettingsScreen  # この行を追加(settings)
 from kivy_garden.mapview import MapMarker
@@ -545,10 +546,111 @@ class MainScreen(Screen):
             self.location_info_label.text = ""
 
     def on_share_button(self, instance):
+        """共有するボタン - データベースに保存して画面遷移"""
         print("📤 共有するボタンが押されました")
+        print(f"📤 DEBUG: selected_location_info = {getattr(self, 'selected_location_info', None)}")
+        print(f"📤 DEBUG: friend_mail = {getattr(self, 'friend_mail', None)}")
+        
         self.is_selecting_location = False
         self.location_info_label.text = ""
-        # TODO: 共有する機能を実装
+        
+        # 位置が選択されているか確認
+        if not hasattr(self, 'selected_location_info') or not self.selected_location_info:
+            print("⚠️ 場所が選択されていません")
+            return
+        
+        lat, lon = self.selected_location_info
+        print(f"✅ 待ち合わせ場所共有: ({lat}, {lon})")
+        
+        # スレッドで処理
+        threading.Thread(
+            target=self._share_meeting_location,
+            args=(lat, lon),
+            daemon=True
+        ).start()
+    
+    def _share_meeting_location(self, lat, lon):
+        """共有ボタンの処理（スレッド実行用）
+        
+        1. meetingsテーブルを保存
+        2. meeting_sharesテーブルに自分と友達のメールを保存
+        3. map.pyへ移動（条件に応じてmap3.pyへ）
+        """
+        try:
+            print(f"🚀 _share_meeting_location started: lat={lat:.6f}, lon={lon:.6f}")
+            
+            # ユーザーメールを取得
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and len(data) > 0:
+                my_mail = data[0].get("user_mail")
+            else:
+                my_mail = data.get("user_mail")
+            
+            if not my_mail:
+                print("⚠️ _share_meeting_location: user_mailが見つかりません")
+                return
+            
+            print(f"📧 my_mail = {my_mail}")
+            
+            # place_name は建物名（location_info_labelから取得）
+            place_name = self.location_info_label.text if self.location_info_label.text else None
+            print(f"🏢 place_name = {place_name}")
+            
+            # 1. meetingsテーブルに保存
+            print(f"📍 Step 1: Saving to meetings table...")
+            meeting_id = save_meeting(lat, lon, place_name)
+            if not meeting_id:
+                print("⚠️ _share_meeting_location: meetingsテーブルへの保存に失敗")
+                return
+            
+            print(f"✅ Step 1 Complete: meeting_id = {meeting_id}")
+            
+            # 2. meeting_sharesテーブルに自分のメールを保存
+            print(f"📍 Step 2: Saving to meeting_shares (my_mail)...")
+            if not save_meeting_shares(my_mail, meeting_id):
+                print("⚠️ _share_meeting_location: 自分のメール保存に失敗")
+                return
+            
+            print(f"✅ Step 2 Complete")
+            
+            # 3. 友達のメールを保存（現在の友達が選択されている場合）
+            if self.friend_mail:
+                print(f"📍 Step 3: Saving to meeting_shares (friend_mail = {self.friend_mail})...")
+                if not save_meeting_shares(self.friend_mail, meeting_id):
+                    print("⚠️ _share_meeting_location: 友達のメール保存に失敗")
+                    return
+                print(f"✅ Step 3 Complete")
+            else:
+                print(f"⚠️ _share_meeting_location: friend_mail is None (スキップ)")
+            
+            # 4. map.pyへ移動か、map3.pyへ移動か判定
+            print(f"📍 Step 4: Checking meeting_shares_status...")
+            has_active_meeting = check_meeting_shares_status(my_mail)
+            print(f"has_active_meeting = {has_active_meeting}")
+            
+            # UI更新（メインスレッド）
+            Clock.schedule_once(lambda dt: self._navigate_after_share(has_active_meeting), 0)
+            
+        except Exception as e:
+            print(f"⚠️ _share_meeting_location: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _navigate_after_share(self, has_active_meeting):
+        """共有後の画面遷移
+        
+        Args:
+            has_active_meeting: True の場合は map3.py へ、False の場合は map.py へ
+        """
+        if has_active_meeting:
+            print("🔄 アクティブなミーティングがあります → map3.pyへ移動")
+            if self.app_instance:
+                self.app_instance.root.current = "map3"
+        else:
+            print("🔄 map.pyへ戻ります")
+            if self.app_instance:
+                self.app_instance.root.current = "map"
     
     def on_back_button(self, window, key, *args):
         """ESCキーまたはAndroidの戻るボタン処理"""

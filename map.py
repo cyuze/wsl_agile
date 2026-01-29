@@ -492,7 +492,9 @@ class MainScreen(FloatLayout):
             marker.lat = lat
             marker.lon = lon
         else:
-            icon_url = fetch_friend_icon(friend_mail) or "img/cat_placeholder.png"
+            # friend_mailからfriend_idを取得
+            friend_id = get_user_id_by_mail(friend_mail)
+            icon_url = fetch_friend_icon(friend_id) or "img/cat_placeholder.png"
 
             marker = FriendMarker(
                 lat, lon, icon_url,

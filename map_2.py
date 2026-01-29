@@ -25,6 +25,9 @@ from map_2_service import (
     initialize_user_location,
     fetch_friends_by_mail,
     get_user_id_by_mail,
+    save_meeting,
+    save_meeting_shares,
+    check_meeting_shares_status,
 )
 
 # 日本語フォント登録
@@ -147,14 +150,18 @@ class CircleImageView(ButtonBehavior, StencilView):
         self.img.size = self.size
 
 class FriendMarker(MapMarker):
-    def __init__(self, lat, lon, icon_url, friend_id, app_instance, **kwargs):
+    def __init__(self, lat, lon, icon_url, friend_id, app_instance, friend_mail=None, **kwargs):
         super().__init__(lat=lat, lon=lon, **kwargs)
         self.friend_id = friend_id
+        self.friend_mail = friend_mail
         self.app_instance = app_instance
         self.container = FriendIconButton(
             icon_url=icon_url,
             friend_id=friend_id,
-            app_instance=app_instance
+            app_instance=app_instance,
+            friend_mail=friend_mail,
+            size_hint=(None, None),
+            size=(100, 100)
         )
         self.add_widget(self.container)
         self.bind(pos=self.update_container)
@@ -163,10 +170,14 @@ class FriendMarker(MapMarker):
         self.container.pos = self.pos
 
 class FriendIconButton(ButtonBehavior, FloatLayout):
-    def __init__(self, icon_url, friend_id, app_instance, **kwargs):
+    def __init__(self, icon_url, friend_id, app_instance, friend_mail=None, **kwargs):
         super().__init__(**kwargs)
-        self.size = (100, 100)
+        if 'size' not in kwargs:
+            self.size = (100, 100)
+        if 'size_hint' not in kwargs:
+            self.size_hint = (None, None)
         self.friend_id = friend_id
+        self.friend_mail = friend_mail
         self.app_instance = app_instance
 
         with self.canvas.before:
@@ -196,6 +207,21 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
 
     def on_press(self):
         print("🧑 フレンドアイコン押された:", self.friend_id)
+        # 友達メールを親のMainScreenに設定
+        screen = self.parent
+        while screen and not isinstance(screen, MainScreen):
+            screen = screen.parent
+        
+        if screen and isinstance(screen, MainScreen):
+            screen.current_friend_id = self.friend_id
+            # friend_mailが未設定の場合は、friend_idから取得
+            if self.friend_mail:
+                screen.current_friend_mail = self.friend_mail
+            else:
+                friend_mail = get_friend_mail(self.friend_id)
+                screen.current_friend_mail = friend_mail
+                print(f"📧 友達メール設定: {friend_mail}")
+        
         if self.app_instance:
             self.app_instance.open_friend_profile(self.friend_id)
 
@@ -219,7 +245,9 @@ class MainScreen(FloatLayout):
         self.location_marker = None
         self.is_location_mode = False
         self.current_friend_id = None
+        self.current_friend_mail = None
         self.selected_location = None
+        self.selected_place_name = None
         self.route_layer = None
         self.location_bg = None
 
@@ -502,18 +530,115 @@ class MainScreen(FloatLayout):
     def on_location_select(self):
         """指定するボタン"""
         if self.selected_location:
-            print(f"📍 場所を指定: {self.selected_location}")
+            lat, lon = self.selected_location
+            # ラベルに座標を表示
+            self.location_title.text = f"場所指定画面 - {lat:.6f}, {lon:.6f}"
+            print(f"📍 場所を指定: ({lat}, {lon})")
         else:
             print("⚠️ 場所を選択してください")
     
     def on_location_share(self):
         """共有するボタン"""
+        print(f"📤 DEBUG: on_location_share called")
+        print(f"📤 DEBUG: selected_location = {getattr(self, 'selected_location', None)}")
+        print(f"📤 DEBUG: current_friend_mail = {getattr(self, 'current_friend_mail', None)}")
+        
         if self.selected_location:
             lat, lon = self.selected_location
             print(f"✅ 待ち合わせ場所共有: ({lat}, {lon})")
-            # TODO: Supabaseに保存
+            print(f"🚀 DEBUG: Starting thread for _share_meeting_location...")
+            # スレッドで処理
+            threading.Thread(
+                target=self._share_meeting_location,
+                args=(lat, lon),
+                daemon=True
+            ).start()
+            print(f"🚀 DEBUG: Thread started successfully")
         else:
             print("⚠️ 場所が選択されていません")
+            print(f"⚠️ DEBUG: selected_location is {getattr(self, 'selected_location', 'ATTRIBUTE_NOT_FOUND')}")
+    
+    def _share_meeting_location(self, lat, lon):
+        """共有ボタンの処理（スレッド実行用）
+        
+        1. meetingsテーブルを保存
+        2. meeting_sharesテーブルに自分と友達のメールを保存
+        3. map.pyへ移動（条件に応じてmap3.pyへ）
+        """
+        try:
+            print(f"🚀 _share_meeting_location started: lat={lat:.6f}, lon={lon:.6f}")
+            # ユーザーメールを取得
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and len(data) > 0:
+                my_mail = data[0].get("user_mail")
+            else:
+                my_mail = data.get("user_mail")
+            
+            if not my_mail:
+                print("⚠️ _share_meeting_location: user_mailが見つかりません")
+                return
+            
+            print(f"📧 my_mail = {my_mail}")
+            
+            # place_name は建物名のみ（指定されていなければNone）
+            place_name = getattr(self, 'selected_place_name', None)
+            print(f"🏢 place_name = {place_name}")
+            
+            # 1. meetingsテーブルに保存
+            print(f"📍 Step 1: Saving to meetings table...")
+            meeting_id = save_meeting(lat, lon, place_name)
+            if not meeting_id:
+                print("⚠️ _share_meeting_location: meetingsテーブルへの保存に失敗")
+                return
+            
+            print(f"✅ Step 1 Complete: meeting_id = {meeting_id}")
+            
+            # 2. meeting_sharesテーブルに自分のメールを保存
+            print(f"📍 Step 2: Saving to meeting_shares (my_mail)...")
+            if not save_meeting_shares(my_mail, meeting_id):
+                print("⚠️ _share_meeting_location: 自分のメール保存に失敗")
+                return
+            
+            print(f"✅ Step 2 Complete")
+            
+            # 3. 友達のメールを保存（現在の友達が選択されている場合）
+            if self.current_friend_mail:
+                print(f"📍 Step 3: Saving to meeting_shares (friend_mail = {self.current_friend_mail})...")
+                if not save_meeting_shares(self.current_friend_mail, meeting_id):
+                    print("⚠️ _share_meeting_location: 友達のメール保存に失敗")
+                    return
+                print(f"✅ Step 3 Complete")
+            else:
+                print(f"⚠️ _share_meeting_location: current_friend_mail is None (スキップ)")
+            
+            # 4. map.pyへ移動か、map3.pyへ移動か判定
+            print(f"📍 Step 4: Checking meeting_shares_status...")
+            has_active_meeting = check_meeting_shares_status(my_mail)
+            print(f"has_active_meeting = {has_active_meeting}")
+            
+            # UI更新（メインスレッド）
+            Clock.schedule_once(lambda dt: self._navigate_after_share(has_active_meeting), 0)
+            
+        except Exception as e:
+            print(f"⚠️ _share_meeting_location: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _navigate_after_share(self, has_active_meeting):
+        """共有後の画面遷移
+        
+        Args:
+            has_active_meeting: True の場合は map3.py へ、False の場合は map.py へ
+        """
+        if has_active_meeting:
+            print("🔄 アクティブなミーティングがあります → map3.pyへ移動")
+            if self.app_instance:
+                self.app_instance.root.current = "map3"
+        else:
+            print("🔄 map.pyへ戻ります")
+            if self.app_instance:
+                self.app_instance.root.current = "map"
     
     # 以下、既存のメソッド
     def stop_updates(self):
@@ -611,17 +736,19 @@ class MainScreen(FloatLayout):
                     lat, lon = location
                     friend_user_id = get_user_id_by_mail(friend_mail)
                     if friend_user_id:
-                        self.update_friend_marker(friend_user_id, lat, lon)
+                        self.update_friend_marker(friend_user_id, lat, lon, friend_mail)
         except Exception as e:
             print(f"⚠️ update_friends error: {e}")
 
-    def update_friend_marker(self, friend_id, lat, lon):
+    def update_friend_marker(self, friend_id, lat, lon, friend_mail=None):
         if friend_id in self.friend_markers:
             marker = self.friend_markers[friend_id]
             marker.lat = lat
             marker.lon = lon
         else:
             icon_url = fetch_friend_icon(friend_id) or "img/cat_placeholder.png"
-            marker = FriendMarker(lat, lon, icon_url, friend_id, self.app_instance)
+            print(f"🎨 fetch_friend_icon({friend_id}) = {icon_url}")
+            marker = FriendMarker(lat, lon, icon_url, friend_id, self.app_instance, friend_mail=friend_mail)
             self.mapview.add_marker(marker)
             self.friend_markers[friend_id] = marker
+            print(f"✅ Friend marker added: {friend_id} at ({lat:.6f}, {lon:.6f})")
