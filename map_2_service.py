@@ -218,22 +218,38 @@ def fetch_friends(user_id):
         return []
 
 
-
-
-
-def fetch_friend_icon(friend_id):
-    url = f"{SUPABASE_URL}/rest/v1/users?select=icon_url&user_id=eq.{friend_id}"
+def fetch_friend_icon(friend_mail):
+    """友人のメールアドレスからアイコンURLを取得
+    
+    Args:
+        friend_mail: 友人のメールアドレス（user_id または user_mail）
+    
+    Returns:
+        icon_url文字列、またはNone
+    """
+    # まず、user_mail として検索
+    url = f"{SUPABASE_URL}/rest/v1/users?select=icon_url&user_mail=eq.{friend_mail}"
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
     try:
         res = requests.get(url, headers=headers)
         data = res.json()
-        print(f"🔍 fetch_friend_icon({friend_id}): response = {data}")
+        print(f"🔍 fetch_friend_icon({friend_mail}): response = {data}")
         if data:
             icon_url = data[0].get("icon_url")
-            print(f"📷 Found icon_url for {friend_id}: {icon_url}")
+            print(f"📷 Found icon_url for {friend_mail}: {icon_url}")
             return icon_url
+        else:
+            # user_mail で見つからない場合、user_id として検索
+            url = f"{SUPABASE_URL}/rest/v1/users?select=icon_url&user_id=eq.{friend_mail}"
+            res = requests.get(url, headers=headers)
+            data = res.json()
+            print(f"🔍 fetch_friend_icon({friend_mail}) as user_id: response = {data}")
+            if data:
+                icon_url = data[0].get("icon_url")
+                print(f"📷 Found icon_url for {friend_mail}: {icon_url}")
+                return icon_url
     except Exception as e:
-        print("⚠️ map_2_service.fetch_friend_icon:", e)
+        print("⚠️ map_service.fetch_friend_icon:", e)
     return None
 
 
@@ -576,4 +592,3 @@ def check_meeting_shares_status(user_mail):
         traceback.print_exc()
         print(f"=" * 60)
         return False
-
