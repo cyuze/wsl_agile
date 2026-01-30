@@ -90,7 +90,7 @@ class GSImapSource(MapSource):
         )
 
 # ===============================================================
-# 丸アイコン（Stencil）
+# 丸アイコン(Stencil)
 # ===============================================================
 class CircleImageView(ButtonBehavior, StencilView):
     def __init__(self, source, **kwargs):
@@ -559,25 +559,36 @@ class MainScreen(Screen):
             print("⚠️ 場所が選択されていません")
             return
         
-        lat, lon = self.selected_location_info
-        print(f"✅ 待ち合わせ場所共有: ({lat}, {lon})")
+        # 修正: タプルのアンパック（建物名を含む場合と含まない場合に対応）
+        if len(self.selected_location_info) == 3:
+            lat, lon, building_name = self.selected_location_info
+        else:
+            lat, lon = self.selected_location_info
+            building_name = None
+        
+        print(f"✅ 待ち合わせ場所共有: ({lat}, {lon}), 建物名: {building_name}")
         
         # スレッドで処理
         threading.Thread(
             target=self._share_meeting_location,
-            args=(lat, lon),
+            args=(lat, lon, building_name),
             daemon=True
         ).start()
     
-    def _share_meeting_location(self, lat, lon):
+    def _share_meeting_location(self, lat, lon, building_name=None):
         """共有ボタンの処理（スレッド実行用）
         
         1. meetingsテーブルを保存
         2. meeting_sharesテーブルに自分と友達のメールを保存
         3. map.pyへ移動（条件に応じてmap3.pyへ）
+        
+        Args:
+            lat: 緯度
+            lon: 経度
+            building_name: 建物名（Noneの場合はnull）
         """
         try:
-            print(f"🚀 _share_meeting_location started: lat={lat:.6f}, lon={lon:.6f}")
+            print(f"🚀 _share_meeting_location started: lat={lat:.6f}, lon={lon:.6f}, building={building_name}")
             
             # ユーザーメールを取得
             with open("users.json", "r", encoding="utf-8") as f:
@@ -592,14 +603,11 @@ class MainScreen(Screen):
                 return
             
             print(f"📧 my_mail = {my_mail}")
+            print(f"🏢 building_name = {building_name}")
             
-            # place_name は建物名（location_info_labelから取得）
-            place_name = self.location_info_label.text if self.location_info_label.text else None
-            print(f"🏢 place_name = {place_name}")
-            
-            # 1. meetingsテーブルに保存
+            # 1. meetingsテーブルに保存（建物名を渡す）
             print(f"📍 Step 1: Saving to meetings table...")
-            meeting_id = save_meeting(lat, lon, place_name)
+            meeting_id = save_meeting(lat, lon, building_name)
             if not meeting_id:
                 print("⚠️ _share_meeting_location: meetingsテーブルへの保存に失敗")
                 return
@@ -620,7 +628,7 @@ class MainScreen(Screen):
                 if not save_meeting_shares(self.friend_mail, meeting_id):
                     print("⚠️ _share_meeting_location: 友達のメール保存に失敗")
                     return
-                print(f"✅ Step 3 Complete")
+                print(f"✅ Step 3 Complete: 友達 {self.friend_mail} を meeting_shares に追加")
             else:
                 print(f"⚠️ _share_meeting_location: friend_mail is None (スキップ)")
             
@@ -739,9 +747,11 @@ class MainScreen(Screen):
                 if 'suburb' in address:
                     info_parts.append(address['suburb'])
                 
-                # 建物名やPOI
+                # 建物名やPOI（これを別に保存）
+                building_name = None
                 if 'name' in data and data['name'] != address.get('city'):
                     info_parts.append(data['name'])
+                    building_name = data['name']  # 建物名のみを保存
                 
                 if info_parts:
                     info_text = " / ".join(info_parts)
@@ -749,13 +759,15 @@ class MainScreen(Screen):
                     info_text = f"座標: 緯度 {lat:.6f}, 経度 {lon:.6f}"
                 
                 self.location_info_label.text = info_text
-                self.selected_location_info = (lat, lon)
-                print(f"✅ 建物情報取得成功: {info_text}")
+                self.selected_location_info = (lat, lon, building_name)  # 建物名も保存
+                print(f"✅ 建物情報取得成功: {info_text} (建物名: {building_name})")
             else:
                 self.location_info_label.text = f"座標: 緯度 {lat:.6f}, 経度 {lon:.6f}"
+                self.selected_location_info = (lat, lon, None)
                 print(f"⚠️ Nominatim APIエラー: {response.status_code}")
         except Exception as e:
             self.location_info_label.text = f"エラー: {str(e)}"
+            self.selected_location_info = (lat, lon, None)
             print(f"❌ 情報取得エラー: {e}")
 
 
