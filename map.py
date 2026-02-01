@@ -632,11 +632,14 @@ class MyApp(App):
     def open_meeting_map(self, friend_mail):
         """待ち合わせ用のマップ画面を開く"""
         # 定期処理を停止
+        print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
         if hasattr(self, 'main_screen'):
             self.main_screen.stop_updates()
         
         self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self, friend_mail=friend_mail)
+        from map2 import MainScreen2
+        self.main_screen = MainScreen2(app_instance=self, friend_mail=friend_mail)
+        
         self.root.add_widget(self.main_screen)
         print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
     

@@ -369,13 +369,14 @@ class SpecifyLocationScreen(FloatLayout):
 # ===============================================================
 # メイン画面
 # ===============================================================
-class MainScreen(Screen):
+class MainScreen2(Screen):
     def __init__(self, app_instance=None, current_user=None, friend_mail=None, **kwargs):  # friend_mail を追加
         super().__init__(**kwargs)
         self.app_instance = app_instance
         self.current_user = current_user
         self.friend_mail = friend_mail  # 待ち合わせ相手のfriend_mailを保存
         Window.clearcolor = (1,1,1,1)
+        print(f"わっしょいわっしょい{friend_mail}")
 
         # ユーザーのIDを取得
         self.user_id = current_user.get("user_id") if current_user else None
@@ -967,7 +968,7 @@ class MainScreen(Screen):
 class MyApp(App):
     def build(self):
         request_location_permissions()
-        self.main_screen = MainScreen(app_instance=self)  # 変更
+        self.main_screen = MainScreen2(app_instance=self)  # 変更
         return self.main_screen  # 追加
     
     # 以下を追加
@@ -1013,7 +1014,7 @@ class MyApp(App):
                     child.stop_updates()
         
         self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self)
+        self.main_screen = MainScreen2(app_instance=self)
         self.root.add_widget(self.main_screen)
         
 
@@ -1056,7 +1057,7 @@ class MyApp(App):
             self.main_screen.stop_updates()
         
         self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self, friend_mail=friend_mail)
+        self.main_screen = MainScreen2(app_instance=self, friend_mail=friend_mail)
         self.root.add_widget(self.main_screen)
         print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
     
