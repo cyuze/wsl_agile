@@ -177,7 +177,28 @@ class MainScreenLogic:
             from kivy.uix.screenmanager import ScreenManager
             if isinstance(self.app.root, ScreenManager):
                 print("🔄 ScreenManager経由でmap画面へ遷移")
-                self.app.root.current = "map"
+                
+                # mapスクリーンが存在するか確認
+                if self.app.root.has_screen("map"):
+                    self.app.root.current = "map"
+                else:
+                    # mapスクリーンがない場合は作成
+                    print("⚠️ mapスクリーンが存在しないため作成します")
+                    from kivy.uix.screenmanager import Screen
+                    from map import MainScreen as MapMainScreen
+                    
+                    class MapScreen(Screen):
+                        def __init__(self, app_inst, **kwargs):
+                            super().__init__(name="map", **kwargs)
+                            app_inst.main_screen = MapMainScreen(
+                                app_instance=app_inst, 
+                                current_user=app_inst.current_user
+                            )
+                            self.add_widget(app_inst.main_screen)
+                    
+                    map_screen = MapScreen(app_inst=self.app)
+                    self.app.root.add_widget(map_screen)
+                    self.app.root.current = "map"
             else:
                 print("🔄 back_to_map()でmap画面へ遷移")
                 self.app.back_to_map()

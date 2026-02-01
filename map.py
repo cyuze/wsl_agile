@@ -602,9 +602,27 @@ class MyApp(App):
                 if isinstance(child, ChatScreen):
                     child.stop_updates()
         
-        self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self)
-        self.root.add_widget(self.main_screen)
+        # アクティブなミーティングがあるかチェック
+        if not self.check_active_meeting_and_navigate():
+            # アクティブなミーティングがない場合は通常のマップ画面へ
+            if isinstance(self.root, ScreenManager):
+                if self.root.has_screen("map"):
+                    self.root.current = "map"
+                else:
+                    # mapスクリーンがない場合は作成
+                    class MapScreen(Screen):
+                        def __init__(self, app_inst, **kwargs):
+                            super().__init__(name="map", **kwargs)
+                            app_inst.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
+                            self.add_widget(app_inst.main_screen)
+                    
+                    map_screen = MapScreen(app_inst=self)
+                    self.root.add_widget(map_screen)
+                    self.root.current = "map"
+            else:
+                self.root.clear_widgets()
+                self.main_screen = MainScreen(app_instance=self)
+                self.root.add_widget(self.main_screen)
         
 
     def open_settings(self):  # このメソッドを追加
