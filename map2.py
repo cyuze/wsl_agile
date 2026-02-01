@@ -13,7 +13,7 @@ from kivy.metrics import dp, sp
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.screenmanager import Screen
+from kivy.uix.screenmanager import Screen, ScreenManager
 import random
 import requests
 import json
@@ -605,12 +605,14 @@ class MainScreen(Screen):
             print(f"📧 my_mail = {my_mail}")
             print(f"🏢 building_name = {building_name}")
             
-            # 1. meetingsテーブルに保存（建物名を渡す）
+            # 1. meetingsテーブルに保存（ホストのメールアドレスを追加）
             print(f"📍 Step 1: Saving to meetings table...")
-            meeting_id = save_meeting(lat, lon, building_name)
+            meeting_id = save_meeting(lat, lon, building_name, host_mail=my_mail)  # ← host_mailを追加
             if not meeting_id:
                 print("⚠️ _share_meeting_location: meetingsテーブルへの保存に失敗")
                 return
+            
+            self.meeting_id = meeting_id 
             
             print(f"✅ Step 1 Complete: meeting_id = {meeting_id}")
             
@@ -654,11 +656,26 @@ class MainScreen(Screen):
         if has_active_meeting:
             print("🔄 アクティブなミーティングがあります → map3.pyへ移動")
             if self.app_instance:
-                self.app_instance.root.current = "map3"
+                try:
+                    # meeting_idを渡してmap3を開く
+                    if hasattr(self, 'meeting_id'):
+                        print(f"📍 meeting_id = {self.meeting_id} を渡してmap3を開きます")
+                        self.app_instance.open_map3(meeting_id=self.meeting_id)
+                    else:
+                        print("⚠️ meeting_id が見つかりません")
+                except Exception as e:
+                    print(f"❌ open_map3 呼び出しエラー: {e}")
+                    import traceback
+                    traceback.print_exc()
         else:
             print("🔄 map.pyへ戻ります")
             if self.app_instance:
-                self.app_instance.root.current = "map"
+                # ScreenManagerを使用して遷移
+                if isinstance(self.app_instance.root, ScreenManager):
+                    self.app_instance.root.current = "map"
+                else:
+                    # フォールバック
+                    self.app_instance.back_to_map()
     
     def on_back_button(self, window, key, *args):
         """ESCキーまたはAndroidの戻るボタン処理"""
@@ -1059,6 +1076,20 @@ class MyApp(App):
         self.main_screen = MainScreen(app_instance=self, friend_mail=friend_mail)
         self.root.add_widget(self.main_screen)
         print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
+        
+    def open_map3(self, meeting_id):
+        """map3画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        self.root.clear_widgets()
+        from map3 import MainScreen as Map3MainScreen
+        # map3.pyのMainScreenをそのまま追加（FloatLayout）
+        map3_screen = Map3MainScreen(app_instance=self, meeting_id=meeting_id)
+        self.root.add_widget(map3_screen)
+
+
     
 
 if __name__ == '__main__':
