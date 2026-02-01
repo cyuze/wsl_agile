@@ -23,6 +23,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import AsyncImage
 from kivy.graphics import Ellipse, StencilPush, StencilUse, StencilUnUse, StencilPop
 from personal_chat_screen import ChatScreen
+from kivy.uix.screenmanager import ScreenManager 
 
 
 # Android 権限
@@ -336,6 +337,7 @@ class MainScreen(FloatLayout):
                     print(f"🔍 DEBUG: Got user_id from Supabase = {self.user_id}")
         except Exception as e:
             print(f"⚠️ fetch_user_id_from_supabase error: {e}")
+            
 
     # ======================================
     # 4つのボタン処理
@@ -547,9 +549,7 @@ class MainScreen(FloatLayout):
                 angle = (my_index * 360 / len(all_markers)) % 360
                 distance = 40  # ピクセル単位でのオフセット距離
                 marker.set_icon_offset(angle, distance)
-                print(f"🎯 [マーカーオフセット] Friend {marker.friend_id}: 角度 {angle:.1f}°, 距離 {distance}px")
-
-
+                print(f"🎯 [マーカーオフセット] Friend {marker.friend_mail}: 角度 {angle:.1f}°, 距離 {distance}px")  # ← friend_idをfriend_mailに変更
 
 # ===============================================================
 # アプリ本体
@@ -639,6 +639,72 @@ class MyApp(App):
         self.main_screen = MainScreen(app_instance=self, friend_mail=friend_mail)
         self.root.add_widget(self.main_screen)
         print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
+        
+    def on_end_meeting(self, instance):
+        """待ち合わせ終了ボタン - meeting_sharesとmeetingsのstatusをfalseにしてmap.pyへ戻る"""
+        print("🛑 待ち合わせ終了")
+        
+        try:
+            # users.jsonからメールアドレスを取得
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            user_mail = data[0].get("user_mail") if isinstance(data, list) else data.get("user_mail")
+            
+            if user_mail:
+                headers = {
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Step 1: meeting_sharesから自分のアクティブなmeeting_idを取得
+                url_shares = f"{SUPABASE_URL}/rest/v1/meeting_shares"
+                params = {
+                    "select": "meeting_id",
+                    "user_mail": f"eq.{user_mail}",
+                    "status": "eq.true"
+                }
+                
+                res = requests.get(url_shares, headers=headers, params=params)
+                if res.status_code == 200 and res.json():
+                    meeting_id = res.json()[0].get("meeting_id")
+                    print(f"📍 アクティブなmeeting_id: {meeting_id}")
+                    
+                    # Step 2: meeting_sharesのstatusをfalseに更新（該当するmeeting_idの全レコード）
+                    update_data = {"status": False}
+                    params_update = {"meeting_id": f"eq.{meeting_id}"}
+                    
+                    res_shares = requests.patch(url_shares, headers=headers, params=params_update, data=json.dumps(update_data))
+                    if res_shares.status_code in (200, 204):
+                        print("✅ meeting_shares のステータスを更新しました")
+                    else:
+                        print(f"⚠️ meeting_shares 更新失敗: {res_shares.status_code}")
+                    
+                    # Step 3: meetingsテーブルのstatusもfalseに更新
+                    url_meetings = f"{SUPABASE_URL}/rest/v1/meetings"
+                    params_meetings = {"id": f"eq.{meeting_id}"}
+                    
+                    res_meetings = requests.patch(url_meetings, headers=headers, params=params_meetings, data=json.dumps(update_data))
+                    if res_meetings.status_code in (200, 204):
+                        print("✅ meetings のステータスを更新しました")
+                    else:
+                        print(f"⚠️ meetings 更新失敗: {res_meetings.status_code}")
+                else:
+                    print("⚠️ アクティブなミーティングが見つかりません")
+            
+        except Exception as e:
+            print(f"❌ on_end_meeting error: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # map.pyへ戻る
+        if self.app:
+            if isinstance(self.app.root, ScreenManager):
+                print("🔄 ScreenManager経由でmap画面へ遷移")
+                self.app.root.current = "map"
+            else:
+                print("🔄 back_to_map()でmap画面へ遷移")
+                self.app.back_to_map()
     
 
 if __name__ == '__main__':

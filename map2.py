@@ -14,6 +14,10 @@ from kivy.metrics import dp, sp
 from kivy.clock import Clock
 from kivy.utils import get_color_from_hex
 
+from kivy.uix.label import Label
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.screenmanager import Screen, ScreenManager
 import random
 import json
 import threading
@@ -340,10 +344,24 @@ class MainScreen(Screen):
                 return
 
             meeting_id = save_meeting(lat, lon, building_name)
+            
+            print(f"📧 my_mail = {my_mail}")
+            print(f"🏢 building_name = {building_name}")
+            
+            # 1. meetingsテーブルに保存（ホストのメールアドレスを追加）
+            print(f"📍 Step 1: Saving to meetings table...")
+            meeting_id = save_meeting(lat, lon, building_name, host_mail=my_mail)  # ← host_mailを追加
             if not meeting_id:
                 print("⚠️ meetings への保存に失敗")
                 return
 
+            
+            self.meeting_id = meeting_id 
+            
+            print(f"✅ Step 1 Complete: meeting_id = {meeting_id}")
+            
+            # 2. meeting_sharesテーブルに自分のメールを保存
+            print(f"📍 Step 2: Saving to meeting_shares (my_mail)...")
             if not save_meeting_shares(my_mail, meeting_id):
                 print("⚠️ meeting_shares（自分）保存失敗")
                 return
@@ -362,6 +380,61 @@ class MainScreen(Screen):
         # ここでは map（この画面）に留まる想定。必要なら app_instance.root.current を切り替え。
         if has_active_meeting:
             print("✅ meeting_shares に共有済み（アクティブ）")
+            print("🔄 アクティブなミーティングがあります → map3.pyへ移動")
+            if self.app_instance:
+                try:
+                    # meeting_idを渡してmap3を開く
+                    if hasattr(self, 'meeting_id'):
+                        print(f"📍 meeting_id = {self.meeting_id} を渡してmap3を開きます")
+                        self.app_instance.open_map3(meeting_id=self.meeting_id)
+                    else:
+                        print("⚠️ meeting_id が見つかりません")
+                except Exception as e:
+                    print(f"❌ open_map3 呼び出しエラー: {e}")
+                    import traceback
+                    traceback.print_exc()
+        else:
+            print("🔄 map.pyへ戻ります")
+            if self.app_instance:
+                # ScreenManagerを使用して遷移
+                if isinstance(self.app_instance.root, ScreenManager):
+                    self.app_instance.root.current = "map"
+                else:
+                    # フォールバック
+                    self.app_instance.back_to_map()
+    
+    def on_back_button(self, window, key, *args):
+        """ESCキーまたはAndroidの戻るボタン処理"""
+        # key=27 が ESC / Android 戻るボタン
+        if key != 27:
+            return False
+        
+        print("[DEBUG] map2.py on_back_button called")
+        
+        if self.manager:
+            # 前の画面（フレンドプロフィール）に戻る
+            try:
+                # friend_profileスクリーンを探して戻る
+                for screen in self.manager.screens:
+                    if 'friend_profile' in screen.name:
+                        self.manager.current = screen.name
+                        return True
+            except:
+                pass
+        
+        # フォールバック：親のback_to_mapメソッドを使用
+        if self.app_instance and hasattr(self.app_instance, 'back_to_map'):
+            self.app_instance.back_to_map()
+            return True
+        
+        return False
+    
+    def on_leave(self):
+        """画面を離脱するときにキーボードイベントのバインドを解除"""
+        try:
+            Window.unbind(on_keyboard=self.on_back_button)
+        except:
+            pass
 
     # ---------- マップタップで位置取得 ----------
     def on_map_touch(self, mapview, touch):
@@ -603,3 +676,113 @@ class _TestApp(App):
 
 if __name__ == "__main__":
     _TestApp().run()
+        self.main_screen = MainScreen(app_instance=self)  # 変更
+        return self.main_screen  # 追加
+    
+    # 以下を追加
+    def open_chat_list(self):
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        """チャット一覧画面を開く"""
+        from chat_screen import MainLayout
+        self.root.clear_widgets()
+        chat_layout = MainLayout(app_instance=self)
+        self.root.add_widget(chat_layout)
+    
+    def open_chat(self, my_id, target_id):  # このメソッドを追加
+        """個別チャット画面を開く"""
+        from personal_chat_screen import ChatScreen
+        self.root.clear_widgets()
+        chat_screen = ChatScreen(my_id, target_id, app_instance=self)
+        self.root.add_widget(chat_screen)
+        
+    def back_to_list(self):  # このメソッドも追加（チャットからリストに戻る用）
+        """チャット一覧に戻る"""
+        self.open_chat_list()
+    
+            
+    def open_friend_addition(self):
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        from addition import FriendApp
+        self.root.clear_widgets()
+        screen = FriendApp()
+        self.root.add_widget(screen)
+            
+    def back_to_map(self):
+        """マップ画面に戻る"""
+        # 現在の画面がChatScreenなら停止
+        if hasattr(self.root, 'children'):
+            for child in self.root.children:
+                if isinstance(child, ChatScreen):
+                    child.stop_updates()
+        
+        self.root.clear_widgets()
+        self.main_screen = MainScreen(app_instance=self)
+        self.root.add_widget(self.main_screen)
+        
+
+    def open_settings(self):  # このメソッドを追加
+        """設定画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        from settings import SettingsScreen
+        self.root.clear_widgets()
+        settings_screen = SettingsScreen(app_instance=self)
+        self.root.add_widget(settings_screen)
+        
+    def open_friend_profile(self, friend_mail):
+        """フレンドプロフィール画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        from friend_profile import FriendProfileScreen
+        self.root.clear_widgets()
+        profile_screen = FriendProfileScreen(friend_mail=friend_mail, app_instance=self)
+        self.root.add_widget(profile_screen)
+    
+    def open_specify_location(self):
+        """場所を指定する画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        self.root.clear_widgets()
+        specify_screen = SpecifyLocationScreen(app_instance=self)
+        self.root.add_widget(specify_screen)
+    
+    def open_meeting_map(self, friend_mail):
+        """待ち合わせ用のマップ画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        self.root.clear_widgets()
+        self.main_screen = MainScreen(app_instance=self, friend_mail=friend_mail)
+        self.root.add_widget(self.main_screen)
+        print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
+        
+    def open_map3(self, meeting_id):
+        """map3画面を開く"""
+        # 定期処理を停止
+        if hasattr(self, 'main_screen'):
+            self.main_screen.stop_updates()
+        
+        self.root.clear_widgets()
+        from map3 import MainScreen as Map3MainScreen
+        # map3.pyのMainScreenをそのまま追加（FloatLayout）
+        map3_screen = Map3MainScreen(app_instance=self, meeting_id=meeting_id)
+        self.root.add_widget(map3_screen)
+
+
+    
+
+if __name__ == '__main__':
+    MyApp().run()
