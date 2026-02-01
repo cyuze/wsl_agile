@@ -618,6 +618,14 @@ class SettingsScreen(Screen):
         print("確定ボタンが押されました。変更内容を確定します。")
         self.show_success_message("変更内容を確定しました。")
         if self.app_instance:
+                # 前の画面がmap3の場合はmap3に戻す
+                from kivy.uix.screenmanager import ScreenManager
+                if hasattr(self.app_instance, 'previous_screen') and self.app_instance.previous_screen == "map3":
+                    if isinstance(self.app_instance.root, ScreenManager) and self.app_instance.root.has_screen("map3"):
+                        self.app_instance.root.current = "map3"
+                        return True
+                
+                # デフォルトはmap画面に戻す
                 self.app_instance.back_to_map()
                 return True
         else: return False
@@ -718,6 +726,13 @@ class SettingsScreen(Screen):
         if key == 27 and self.manager.current == "settings":
             print("戻るボタン: map に戻ります")
             if self.app_instance:
+                # 前の画面がmap3の場合はmap3に戻す
+                if hasattr(self.app_instance, 'previous_screen') and self.app_instance.previous_screen == "map3":
+                    if isinstance(self.app_instance.root, ScreenManager) and self.app_instance.root.has_screen("map3"):
+                        self.app_instance.root.current = "map3"
+                        return True
+                
+                # デフォルトはmap画面に戻す
                 self.app_instance.back_to_map()
                 return True
         return False

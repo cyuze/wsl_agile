@@ -208,6 +208,8 @@ class MainScreenLogic:
     # ------------------------
     def on_friend_button(self, instance):
         if self.app:
+            # 前の画面をmap3として記録
+            self.app.previous_screen = "map3"
             self.app.open_friend_addition()
 
     # ------------------------
@@ -215,6 +217,8 @@ class MainScreenLogic:
     # ------------------------
     def on_chat_button(self, instance):
         if self.app:
+            # 前の画面をmap3として記録
+            self.app.previous_screen = "map3"
             self.app.open_chat_list()
 
     # ------------------------
@@ -222,4 +226,6 @@ class MainScreenLogic:
     # ------------------------
     def on_settings_button(self, instance):
         if self.app:
+            # 前の画面をmap3として記録
+            self.app.previous_screen = "map3"
             self.app.open_settings()
