@@ -189,7 +189,7 @@ class FriendMarker(MapMarker):
         self._update_container()
 
 # ========= メイン画面 =========
-class MainScreen(Screen):
+class MainScreen2(Screen):
     """
     ・マップは全面表示（size_hint=(1,1)）
     ・下部に「薄い緑の帯（オーバーレイ）」＋「指定する／共有する」丸角ボタン
@@ -676,7 +676,7 @@ class _TestApp(App):
 
 if __name__ == "__main__":
     _TestApp().run()
-        self.main_screen = MainScreen(app_instance=self)  # 変更
+        self.main_screen = MainScreen2(app_instance=self)  # 変更
         return self.main_screen  # 追加
     
     # 以下を追加
@@ -722,7 +722,7 @@ if __name__ == "__main__":
                     child.stop_updates()
         
         self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self)
+        self.main_screen = MainScreen2(app_instance=self)
         self.root.add_widget(self.main_screen)
         
 
@@ -765,7 +765,7 @@ if __name__ == "__main__":
             self.main_screen.stop_updates()
         
         self.root.clear_widgets()
-        self.main_screen = MainScreen(app_instance=self, friend_mail=friend_mail)
+        self.main_screen = MainScreen2(app_instance=self, friend_mail=friend_mail)
         self.root.add_widget(self.main_screen)
         print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
         

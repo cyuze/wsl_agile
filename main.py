@@ -631,26 +631,30 @@ class WaitingApp(App):
             
             self.root.current = screen_name
     
-    def open_meeting_map(self, friend_id):
+    def open_meeting_map(self, friend_mail):
         """待ち合わせ用のマップ画面を開く"""
-        from map2 import MainScreen
-        
+        from map2 import MainScreen2
+
         if isinstance(self.root, ScreenManager):
             screen_name = "meeting_map"
-            
+
             if not self.root.has_screen(screen_name):
                 class MeetingMapScreen(Screen):
-                    def __init__(self, friend_id, app_inst, **kwargs):
+                    def __init__(self, friend_mail, app_inst, **kwargs):
                         super().__init__(name=screen_name, **kwargs)
-                        self.friend_id = friend_id
-                        self.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
+                        self.main_screen = MainScreen2(
+                            app_instance=app_inst,
+                            current_user=app_inst.current_user,
+                            friend_mail=friend_mail
+                        )
                         self.add_widget(self.main_screen)
-                
-                new_screen = MeetingMapScreen(friend_id, app_inst=self)
+
+                new_screen = MeetingMapScreen(friend_mail, app_inst=self)
                 self.root.add_widget(new_screen)
-            
+
             self.root.current = screen_name
-            print(f"🗺️ 友人 {friend_id} との待ち合わせ場所を指定してください")
+
+            print(f"🗺️ 友人 {friend_mail} との待ち合わせ場所を指定してください")
     
     def open_friend_addition(self):
         """友だち追加画面を開く"""
