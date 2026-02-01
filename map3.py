@@ -111,13 +111,18 @@ class FriendMarker(MapMarker):
 # Main Screen
 # ========================
 class MainScreen(FloatLayout):
-    def __init__(self, app_instance=None, friend_mail=None, place_name=None, **kwargs):
+    def __init__(self, app_instance=None, friend_mail=None, place_name=None, meeting_id=None, **kwargs):
         super().__init__(**kwargs)
         self.app_instance = app_instance
         self.friend_mail = friend_mail
         self.place_name = place_name
+        self.meeting_id = meeting_id  
+
+        print(f"🔍 DEBUG: map3.MainScreen initialized with meeting_id = {self.meeting_id}")
 
         Window.clearcolor = (1, 1, 1, 1)
+
+        # ... (以下のコードは変更なし)
 
         # -------------------------
         # MapView
@@ -237,6 +242,7 @@ class MainScreen(FloatLayout):
                 lat, lon = info["location"]
                 place_name = info["place_name"]
                 members = info["members"]
+                self.meeting_id = info["meeting_id"]  # meeting_id を更新
 
                 self.mapview.center_on(lat, lon)
                 self.meeting_place_label.text = f"場所: {place_name}"
@@ -264,10 +270,11 @@ class MyApp(App):
         self.friend_mail = friend_mail
         self.place_name = place_name
 
-    def build(self):
+    def build(self, meeting_id):
         request_location_permissions()
-        self.main_screen = MainScreen(app_instance=self, friend_mail=self.friend_mail, place_name=self.place_name)
+        self.main_screen = MainScreen(app_instance=self, friend_mail=self.friend_mail, place_name=self.place_name, meeting_id=meeting_id)
         return self.main_screen
+    
 
     def back_to_map(self):
         self.root.clear_widgets()
@@ -293,6 +300,8 @@ class MyApp(App):
         self.root.clear_widgets()
         from chat_screen import MainLayout
         self.root.add_widget(MainLayout(app_instance=self))
+        
+
 
 
 if __name__ == '__main__':

@@ -25,7 +25,7 @@ def request_location_permissions():
 # Supabase 設定
 # ============================
 SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
-SUPABASE_KEY = "YOUR_KEY"  # ← map3.py と合わせてね
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"  # ← map3.py と合わせてね
 
 
 # ============================
@@ -106,9 +106,81 @@ class MainScreenLogic:
     # 待ち合わせ終了
     # ------------------------
     def on_end_meeting(self, instance):
+        """待ち合わせ終了ボタン - 現在案内している場所のIDのmeetingとmeeting_sharesのstatusをfalseにしてmap.pyへ戻る"""
         print("🛑 待ち合わせ終了")
+        
+        try:
+            # screenからmeeting_idを取得
+            meeting_id = getattr(self.screen, 'meeting_id', None)
+            
+            if not meeting_id:
+                print("⚠️ meeting_id が見つかりません - users.jsonから取得を試みます")
+                # users.jsonからメールアドレスを取得
+                with open("users.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                user_mail = data[0].get("user_mail") if isinstance(data, list) else data.get("user_mail")
+                
+                if user_mail:
+                    # meeting_sharesから自分のアクティブなmeeting_idを取得
+                    url_shares = f"{SUPABASE_URL}/rest/v1/meeting_shares"
+                    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+                    params = {
+                        "select": "meeting_id",
+                        "user_mail": f"eq.{user_mail}",
+                        "status": "eq.true"
+                    }
+                    
+                    res = requests.get(url_shares, headers=headers, params=params)
+                    if res.status_code == 200 and res.json():
+                        meeting_id = res.json()[0].get("meeting_id")
+                        print(f"📍 meeting_sharesから取得したmeeting_id: {meeting_id}")
+            
+            if meeting_id:
+                headers = {
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "Content-Type": "application/json"
+                }
+                
+                print(f"📍 処理対象のmeeting_id（場所のID）: {meeting_id}")
+                
+                # Step 1: meeting_sharesで該当meeting_idのすべてのレコードのstatusをfalseに更新
+                update_data = {"status": False}
+                url_shares = f"{SUPABASE_URL}/rest/v1/meeting_shares"
+                params_update = {"meeting_id": f"eq.{meeting_id}"}
+                
+                res_shares = requests.patch(url_shares, headers=headers, params=params_update, data=json.dumps(update_data))
+                if res_shares.status_code in (200, 204):
+                    print(f"✅ meeting_shares のステータスをfalseに更新しました（meeting_id: {meeting_id}）")
+                else:
+                    print(f"⚠️ meeting_shares 更新失敗: {res_shares.status_code}")
+                
+                # Step 2: meetingsテーブルでも該当meeting_idのstatusをfalseに更新
+                url_meetings = f"{SUPABASE_URL}/rest/v1/meetings"
+                params_meetings = {"id": f"eq.{meeting_id}"}
+                
+                res_meetings = requests.patch(url_meetings, headers=headers, params=params_meetings, data=json.dumps(update_data))
+                if res_meetings.status_code in (200, 204):
+                    print(f"✅ meetings のステータスをfalseに更新しました（meeting_id: {meeting_id}）")
+                else:
+                    print(f"⚠️ meetings 更新失敗: {res_meetings.status_code}")
+            else:
+                print("⚠️ meeting_id が取得できませんでした")
+            
+        except Exception as e:
+            print(f"❌ on_end_meeting error: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # map.pyへ戻る
         if self.app:
-            self.app.back_to_map()
+            from kivy.uix.screenmanager import ScreenManager
+            if isinstance(self.app.root, ScreenManager):
+                print("🔄 ScreenManager経由でmap画面へ遷移")
+                self.app.root.current = "map"
+            else:
+                print("🔄 back_to_map()でmap画面へ遷移")
+                self.app.back_to_map()
 
     # ------------------------
     # 友達ボタン
