@@ -303,6 +303,7 @@ class WaitingApp(App):
         self.main_screen = None
         self.screen_manager = None
         self.current_friend_id = None  # 待ち合わせ対象の友達ID
+        self.previous_screen = "map"  # 前の画面を追跡（デフォルトはmap）
     
     def build(self):
         self.title = "待ち合わせアプリ"
@@ -534,6 +535,8 @@ class WaitingApp(App):
         from chat_screen import MainLayout
 
         if isinstance(self.root, ScreenManager):
+            # 前の画面を記録
+            self.previous_screen = self.root.current
 
             # 同じ画面がないかチェック
             if not self.root.has_screen("chat_list"):
@@ -582,9 +585,19 @@ class WaitingApp(App):
 
 
     def back_to_map(self):
-        """マップ画面に戻る"""
-        if isinstance(self.root, ScreenManager) and self.root.has_screen("map"):
-            self.root.current = "map"
+        """マップ画面に戻る（前の画面がmap3の場合はmap3に戻す）"""
+        if isinstance(self.root, ScreenManager):
+            # 前の画面がmap3の場合はmap3に戻す
+            if self.previous_screen == "map3" and self.root.has_screen("map3"):
+                self.root.current = "map3"
+            elif self.root.has_screen("map"):
+                self.root.current = "map"
+            else:
+                # fallback: デフォルトはmap画面を作成
+                from map import MainScreen
+                self.root.clear_widgets()
+                self.main_screen = MainScreen(app_instance=self, current_user=self.current_user)
+                self.root.add_widget(self.main_screen)
         else:
             from map import MainScreen
             self.root.clear_widgets()
@@ -598,6 +611,9 @@ class WaitingApp(App):
             from settings import SettingsScreen
             
             if isinstance(self.root, ScreenManager):
+                # 前の画面を記録
+                self.previous_screen = self.root.current
+                
                 if not self.root.has_screen("settings"):
                     s = SettingsScreen(name="settings", app_instance=self)
                     self.root.add_widget(s)
@@ -611,6 +627,9 @@ class WaitingApp(App):
         from kivy.core.window import Window
         
         if isinstance(self.root, ScreenManager):
+            # 前の画面を記録
+            self.previous_screen = self.root.current
+            
             screen_name = f"friend_profile_{friend_mail}"
             
             if not self.root.has_screen(screen_name):
@@ -666,6 +685,8 @@ class WaitingApp(App):
         from addition import FriendApp  
 
         if isinstance(self.root, ScreenManager):
+            # 前の画面を記録
+            self.previous_screen = self.root.current
 
             screen_name = "friend_add"
 

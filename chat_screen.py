@@ -360,9 +360,17 @@ class MainLayout(BoxLayout):
 
     # 🔥 Androidの戻るボタン処理を追加
     def on_back_button(self, window, key, *args):
-        """Androidの戻るボタンでmap画面に戻る"""
+        """Androidの戻るボタンでmap画面またはmap3画面に戻る"""
         if key == 27:  # ESC / Android戻るボタン
             if self.app_instance:
+                # 前の画面がmap3の場合はmap3に戻す
+                if hasattr(self.app_instance, 'previous_screen') and self.app_instance.previous_screen == "map3":
+                    from kivy.uix.screenmanager import ScreenManager
+                    if isinstance(self.app_instance.root, ScreenManager) and self.app_instance.root.has_screen("map3"):
+                        self.app_instance.root.current = "map3"
+                        return True
+                
+                # デフォルトはmap画面に戻す
                 self.app_instance.open_map_screen()
             return True  # イベントを消費
         return False
