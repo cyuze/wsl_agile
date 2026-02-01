@@ -312,18 +312,21 @@ class WaitingApp(App):
         
         # ✅ 自動ログインチェック
         if self.check_auto_login():
-            print("✅ 自動ログイン成功 - マップ画面へ")
-            # マップ画面を最初に表示
-            class MapScreen(Screen):
-                def __init__(self, app_inst, **kwargs):
-                    super().__init__(name="map", **kwargs)
-                    # ★★★ main_screenを保存 ★★★
-                    app_inst.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
-                    self.add_widget(app_inst.main_screen)
+            print("✅ 自動ログイン成功")
             
-            map_screen = MapScreen(app_inst=self)
-            self.screen_manager.add_widget(map_screen)
-            self.screen_manager.current = "map"
+            # アクティブなミーティングがあるかチェック
+            if not self.check_active_meeting_and_navigate():
+                # アクティブなミーティングがない場合はマップ画面へ
+                print("→ 通常のマップ画面へ")
+                class MapScreen(Screen):
+                    def __init__(self, app_inst, **kwargs):
+                        super().__init__(name="map", **kwargs)
+                        app_inst.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
+                        self.add_widget(app_inst.main_screen)
+                
+                map_screen = MapScreen(app_inst=self)
+                self.screen_manager.add_widget(map_screen)
+                self.screen_manager.current = "map"
         else:
             print("⚠️ 自動ログイン失敗 - ログイン画面へ")
             # ログイン画面を表示
@@ -405,20 +408,22 @@ class WaitingApp(App):
             return False
     
     def open_map_screen(self):
-        """map画面を開く"""
+        """map画面を開く（ログイン後に呼ばれる）"""
         if isinstance(self.root, ScreenManager):
-            if not self.root.has_screen("map"):
-                class MapScreen(Screen):
-                    def __init__(self, app_inst, **kwargs):
-                        super().__init__(name="map", **kwargs)
-                        # ★★★ main_screenを保存 ★★★
-                        app_inst.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
-                        self.add_widget(app_inst.main_screen)
+            # アクティブなミーティングがあるかチェック
+            if not self.check_active_meeting_and_navigate():
+                # アクティブなミーティングがない場合は通常のマップ画面へ
+                if not self.root.has_screen("map"):
+                    class MapScreen(Screen):
+                        def __init__(self, app_inst, **kwargs):
+                            super().__init__(name="map", **kwargs)
+                            app_inst.main_screen = MainScreen(app_instance=app_inst, current_user=app_inst.current_user)
+                            self.add_widget(app_inst.main_screen)
+                    
+                    map_screen = MapScreen(app_inst=self)
+                    self.root.add_widget(map_screen)
                 
-                map_screen = MapScreen(app_inst=self)
-                self.root.add_widget(map_screen)
-            
-            self.root.current = "map"
+                self.root.current = "map"
         else:
             self.root.clear_widgets()
             self.main_screen = MainScreen(app_instance=self, current_user=self.current_user)
@@ -696,6 +701,43 @@ class WaitingApp(App):
 
             # 画面遷移
             self.root.current = "picture"
+            
+    def check_active_meeting_and_navigate(self):
+        """アクティブなミーティングがあるかチェックし、あればmap3へ遷移"""
+        try:
+            # users.jsonからメールアドレスを取得
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and len(data) > 0:
+                user_mail = data[0].get("user_mail")
+            else:
+                user_mail = data.get("user_mail")
+            
+            if not user_mail:
+                print("⚠️ check_active_meeting_and_navigate: user_mail not found")
+                return False
+            
+            # meeting_sharesテーブルをチェック
+            from map_2_service import check_meeting_shares_status
+            has_active_meeting = check_meeting_shares_status(user_mail)
+            
+            if has_active_meeting:
+                print("✅ アクティブなミーティングが見つかりました → map3へ自動遷移")
+                # meeting_idを取得
+                from map3_service import get_active_meeting_info
+                meeting_info = get_active_meeting_info(user_mail)
+                
+                if meeting_info:
+                    meeting_id = meeting_info.get("meeting_id")
+                    # map3を開く
+                    Clock.schedule_once(lambda dt: self.open_map3(meeting_id=meeting_id), 0.5)
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ check_active_meeting_and_navigate error: {e}")
+            return False
 
 
 

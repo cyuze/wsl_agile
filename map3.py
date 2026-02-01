@@ -11,12 +11,15 @@ from kivy.clock import Clock
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.core.text import LabelBase
+from kivy.metrics import dp
+from kivy.utils import get_color_from_hex
 
 from map3_service import (
     MainScreenLogic,
     request_location_permissions,
     get_active_meeting_info
 )
+from map_service import fetch_friend_location, fetch_friend_icon, get_user_id_by_mail
 
 LabelBase.register(name='NotoSansJP', fn_regular='NotoSansJP-Regular.ttf')
 
@@ -35,6 +38,16 @@ class GSImapSource(MapSource):
             min_zoom=5,
             **kwargs
         )
+
+
+# ========================
+# 小さいピンマーカー
+# ========================
+class SmallPinMarker(MapMarker):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (None, None)
+        self.size = (dp(45), dp(45))
 
 
 # ========================
@@ -64,11 +77,17 @@ class ImageButton(ButtonBehavior, FloatLayout):
 class FriendIconButton(ButtonBehavior, FloatLayout):
     def __init__(self, icon_url, friend_mail, app_instance, **kwargs):
         super().__init__(**kwargs)
-        self.size = (100, 100)
+        self.size = (dp(56), dp(56))
         self.friend_mail = friend_mail
         self.app_instance = app_instance
 
         with self.canvas.before:
+            # 外枠（薄い緑）
+            Color(*get_color_from_hex('#D1EFC7'))
+            self.outer = Ellipse(
+                size=(self.size[0] + dp(8), self.size[1] + dp(8)),
+                pos=(self.pos[0] - dp(4), self.pos[1] - dp(4))
+            )
             StencilPush()
             self.mask = Ellipse(size=self.size, pos=self.pos)
             StencilUse()
@@ -87,6 +106,8 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
         self.mask.size = self.size
         self.image.pos = self.pos
         self.image.size = self.size
+        self.outer.pos = (self.pos[0] - dp(4), self.pos[1] - dp(4))
+        self.outer.size = (self.size[0] + dp(8), self.size[1] + dp(8))
 
     def on_press(self):
         if self.app_instance:
@@ -117,6 +138,9 @@ class MainScreen(FloatLayout):
         self.friend_mail = friend_mail
         self.place_name = place_name
         self.meeting_id = meeting_id  
+        self.meeting_marker = None
+        self.my_marker = None
+        self.friend_markers = []
 
         print(f"🔍 DEBUG: map3.MainScreen initialized with meeting_id = {self.meeting_id}")
 
@@ -232,6 +256,7 @@ class MainScreen(FloatLayout):
     # -------------------------
     def load_meeting_info(self):
         try:
+            import json  # ← 追加
             with open("users.json", "r", encoding="utf-8") as f:
                 data = f.read()
             user = json.loads(data)[0]
@@ -242,16 +267,44 @@ class MainScreen(FloatLayout):
                 lat, lon = info["location"]
                 place_name = info["place_name"]
                 members = info["members"]
-                self.meeting_id = info["meeting_id"]  # meeting_id を更新
+                self.meeting_id = info["meeting_id"]
 
+                # マップの中心を待ち合わせ地点に移動
                 self.mapview.center_on(lat, lon)
-                self.meeting_place_label.text = f"場所: {place_name}"
+                
+                # 待ち合わせ地点にマーカーを追加
+                if self.meeting_marker:
+                    self.mapview.remove_marker(self.meeting_marker)
+                self.meeting_marker = SmallPinMarker(lat=lat, lon=lon, source="img/red_pin.png")
+                self.mapview.add_marker(self.meeting_marker)
+                print(f"📍 待ち合わせ地点マーカーを追加: ({lat}, {lon})")
+                
+                # 場所名を表示
+                if place_name:
+                    self.meeting_place_label.text = f"場所: {place_name}"
+                else:
+                    self.meeting_place_label.text = f"場所: 緯度 {lat:.6f}, 経度 {lon:.6f}"
 
+                # 相手のメールアドレスを表示
                 others = [m for m in members if m != my_mail]
-                self.meeting_friend_label.text = f"相手: {', '.join(others)}"
+                if others:
+                    self.meeting_friend_label.text = f"相手: {', '.join(others)}"
+                else:
+                    self.meeting_friend_label.text = "相手: なし"
+
+                # 自分と相手の現在地マーカーを追加
+                self._add_member_markers(my_mail, others)
+                
+                print(f"✅ 待ち合わせ情報を描画しました")
+                print(f"   - meeting_id: {self.meeting_id}")
+                print(f"   - 場所: {place_name}")
+                print(f"   - 座標: ({lat}, {lon})")
+                print(f"   - メンバー: {members}")
 
         except Exception as e:
             print(f"⚠️ load_meeting_info error: {e}")
+            import traceback
+            traceback.print_exc()
 
     # -------------------------
     # 上部バー背景更新
@@ -259,6 +312,52 @@ class MainScreen(FloatLayout):
     def _update_meeting_bg(self, *args):
         self.meeting_bg.size = self.meeting_bar.size
         self.meeting_bg.pos = self.meeting_bar.pos
+
+    # -------------------------
+    # 自分・相手のマーカー追加
+    # -------------------------
+    def _add_member_markers(self, my_mail, others):
+        try:
+            if self.my_marker:
+                self.mapview.remove_marker(self.my_marker)
+                self.my_marker = None
+            for marker in self.friend_markers:
+                self.mapview.remove_marker(marker)
+            self.friend_markers = []
+
+            my_loc = fetch_friend_location(my_mail)
+            if my_loc:
+                my_lat, my_lon = my_loc
+                self.my_marker = MapMarker(lat=my_lat, lon=my_lon, source="img/pin.png")
+                self.mapview.add_marker(self.my_marker)
+                print(f"🙋 自分マーカーを追加: ({my_lat}, {my_lon})")
+
+            for friend_mail in others:
+                friend_loc = fetch_friend_location(friend_mail)
+                if friend_loc:
+                    f_lat, f_lon = friend_loc
+                    icon_url = None
+                    try:
+                        friend_id = get_user_id_by_mail(friend_mail)
+                    except Exception as e:
+                        print(f"⚠️ get_user_id_by_mail error: {e}")
+                        friend_id = None
+
+                    if friend_id:
+                        try:
+                            icon_url = fetch_friend_icon(friend_id)
+                        except Exception as e:
+                            print(f"⚠️ fetch_friend_icon error: {e}")
+
+                    if not icon_url:
+                        icon_url = "img/cat_placeholder.png"
+
+                    marker = FriendMarker(f_lat, f_lon, icon_url, friend_mail, self.app_instance)
+                    self.mapview.add_marker(marker)
+                    self.friend_markers.append(marker)
+                    print(f"👥 相手マーカーを追加: {friend_mail} ({f_lat}, {f_lon})")
+        except Exception as e:
+            print(f"⚠️ _add_member_markers error: {e}")
 
 
 # ========================

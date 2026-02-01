@@ -31,6 +31,7 @@ from map_service import (
 )
 from map_service import get_user_id_by_mail
 from map_2_service import save_meeting, save_meeting_shares, check_meeting_shares_status
+from personal_chat_screen import ChatScreen
 
 # ========= フォントと背景色 =========
 LabelBase.register(name="Japanese", fn_regular="NotoSansJP-Regular.ttf")
@@ -342,8 +343,6 @@ class MainScreen2(Screen):
             if not my_mail:
                 print("⚠️ user_mail が取得できません")
                 return
-
-            meeting_id = save_meeting(lat, lon, building_name)
             
             print(f"📧 my_mail = {my_mail}")
             print(f"🏢 building_name = {building_name}")
@@ -672,12 +671,10 @@ class MainScreen2(Screen):
 class _TestApp(App):
     def build(self):
         request_location_permissions()
-        return MainScreen()
-
-if __name__ == "__main__":
-    _TestApp().run()
-        self.main_screen = MainScreen2(app_instance=self)  # 変更
-        return self.main_screen  # 追加
+        return MainScreen2()
+    
+        # self.main_screen = MainScreen2(app_instance=self)  # 変更
+        # return self.main_screen  # 追加
     
     # 以下を追加
     def open_chat_list(self):
@@ -754,6 +751,7 @@ if __name__ == "__main__":
         if hasattr(self, 'main_screen'):
             self.main_screen.stop_updates()
         
+        from specify_location1 import MainScreen as SpecifyLocationScreen
         self.root.clear_widgets()
         specify_screen = SpecifyLocationScreen(app_instance=self)
         self.root.add_widget(specify_screen)
@@ -782,7 +780,6 @@ if __name__ == "__main__":
         self.root.add_widget(map3_screen)
 
 
-    
 
-if __name__ == '__main__':
-    MyApp().run()
+if __name__ == "__main__":
+    _TestApp().run()
