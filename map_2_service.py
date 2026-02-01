@@ -369,13 +369,14 @@ def save_my_location(gps):
     return False
 
 
-def save_meeting(lat, lon, place_name=None):
+def save_meeting(lat, lon, place_name=None, host_mail=None):
     """meetingsテーブルにデータを保存
     
     Args:
         lat: 緯度
         lon: 経度
         place_name: 場所の名前（建物名のみ）、Noneの場合はnullで保存
+        host_mail: 待ち合わせのホストのメールアドレス
     
     Returns:
         meeting_id（UUID）、または None
@@ -393,20 +394,19 @@ def save_meeting(lat, lon, place_name=None):
             "Prefer": "return=representation"
         }
         
-        # location形式: 複数の形式を試せるように準備
-        # PostgreSQL point型の場合: (lon,lat) または "(lon,lat)"
-        # text型の場合: "{lat,lon}" または "lat,lon"
-        location_value = "{" + f"{lat},{lon}" + "}"  # デフォルト形式
+        location_value = "{" + f"{lat},{lon}" + "}"
         
         payload = {
             "location": location_value,
             "place_name": place_name if place_name else None,
+            "created_by": host_mail,  # ← ホストのメールアドレスを追加
             "status": True
         }
         
         print(f"📝 送信データ:")
         print(f"   - location: {payload['location']} (形式: text配列)")
         print(f"   - place_name: {payload['place_name']}")
+        print(f"   - created_by: {payload['created_by']}")  # ← ログに追加
         print(f"   - status: {payload['status']}")
         print(f"📤 meetingsテーブルへPOST送信中...")
         
@@ -414,7 +414,7 @@ def save_meeting(lat, lon, place_name=None):
         
         print(f"📥 レスポンス受信:")
         print(f"   - status_code: {res.status_code}")
-        print(f"   - response: {res.text[:200]}")  # 最初の200文字
+        print(f"   - response: {res.text[:200]}")
         
         if res.status_code in (200, 201):
             data = res.json()
@@ -422,7 +422,6 @@ def save_meeting(lat, lon, place_name=None):
             print(f"   - データ型: {type(data)}")
             print(f"   - データ内容: {data}")
             
-            # レスポンスがリスト形式の場合と単一オブジェクト形式に対応
             if isinstance(data, list):
                 if len(data) > 0:
                     meeting_id = data[0].get("id")
@@ -439,6 +438,7 @@ def save_meeting(lat, lon, place_name=None):
                 print(f"🎉 meetingsテーブルへの保存成功!")
                 print(f"   - meeting_id: {meeting_id}")
                 print(f"   - 座標: ({lat:.6f}, {lon:.6f})")
+                print(f"   - ホスト: {host_mail}")  # ← ログに追加
                 print(f"=" * 60)
                 return meeting_id
             else:

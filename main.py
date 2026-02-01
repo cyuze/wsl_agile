@@ -423,7 +423,33 @@ class WaitingApp(App):
             self.root.clear_widgets()
             self.main_screen = MainScreen(app_instance=self, current_user=self.current_user)
             self.root.add_widget(self.main_screen)
-    
+            
+    def open_map3(self, meeting_id=None):
+        """map3画面を開く"""
+        from map3 import MainScreen as Map3Screen
+        
+        if isinstance(self.root, ScreenManager):
+            screen_name = "map3"
+            
+            # 既存のmap3スクリーンを削除
+            if self.root.has_screen(screen_name):
+                self.root.remove_widget(self.root.get_screen(screen_name))
+            
+            class Map3ScreenWrapper(Screen):
+                def __init__(self, app_inst, meeting_id, **kwargs):
+                    super().__init__(name=screen_name, **kwargs)
+                    # FloatLayoutのMainScreenをそのまま追加
+                    self.main_screen = Map3Screen(
+                        app_instance=app_inst, 
+                        meeting_id=meeting_id
+                    )
+                    self.add_widget(self.main_screen)
+            
+            new_screen = Map3ScreenWrapper(app_inst=self, meeting_id=meeting_id)
+            self.root.add_widget(new_screen)
+            self.root.current = screen_name
+            print(f"🗺️ map3画面に遷移しました (meeting_id: {meeting_id})")
+        
     def open_location_mode(self, friend_id=None):
         """場所指定モードを開く - friend_profile.pyから呼ばれる"""
         print(f"📍 open_location_mode called with friend_id: {friend_id}")
