@@ -161,10 +161,6 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
         self.outer.pos = (self.pos[0] - Sdp(4), self.pos[1] - Sdp(4))
         self.outer.size = (self.size[0] + Sdp(8), self.size[1] + Sdp(8))
 
-    def on_press(self):
-        if self.app_instance and hasattr(self.app_instance, 'open_friend_profile'):
-            self.app_instance.open_friend_profile(self.friend_mail)
-
 class FriendMarker(MapMarker):
     def __init__(self, lat, lon, icon_url, friend_mail, app_instance, **kwargs):
         super().__init__(lat=lat, lon=lon, **kwargs)

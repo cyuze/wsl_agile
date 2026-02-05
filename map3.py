@@ -109,9 +109,6 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
         self.outer.pos = (self.pos[0] - dp(4), self.pos[1] - dp(4))
         self.outer.size = (self.size[0] + dp(8), self.size[1] + dp(8))
 
-    def on_press(self):
-        if self.app_instance:
-            self.app_instance.open_friend_profile(self.friend_mail)
 
 
 class FriendMarker(MapMarker):
@@ -162,7 +159,7 @@ class MainScreen(FloatLayout):
         # -------------------------
         # 上部バー
         # -------------------------
-        self.meeting_bar = FloatLayout(size_hint=(1, None), height=90, pos_hint={'top': 1})
+        self.meeting_bar = FloatLayout(size_hint=(1, None), height=dp(170), pos_hint={'top': 1})
 
         with self.meeting_bar.canvas.before:
             Color(1, 1, 1, 0.9)
@@ -173,41 +170,67 @@ class MainScreen(FloatLayout):
             text="待ち合わせ中",
             size_hint=(None, None),
             size=(300, 40),
-            pos_hint={'x': 0.03, 'center_y': 0.7},
+            pos_hint={'x': 0.05, 'center_y': 0.75},
             color=(0, 0, 0, 1),
-            font_size=22,
+            font_size=50,
+            halign="left",
             font_name="NotoSansJP"
         )
 
+        # self.meeting_friend_label = Label(
+        #     text="相手: 読み込み中…",
+        #     size_hint=(None, None),
+        #     size=(600, 30),
+        #     pos_hint={'x': 0, 'center_y': 0.4},
+        #     color=(0.2, 0.2, 0.2, 1),
+        #     font_size=45,
+        #     font_name="NotoSansJP"
+        #     halign="left",
+        #     valign="middle"
+        # )
         self.meeting_friend_label = Label(
             text="相手: 読み込み中…",
-            size_hint=(None, None),
-            size=(600, 30),
+            size_hint=(1, None),
+            height=dp(30),
             pos_hint={'x': 0.03, 'center_y': 0.4},
             color=(0.2, 0.2, 0.2, 1),
-            font_size=18,
-            font_name="NotoSansJP"
+            font_size=39,
+            font_name="NotoSansJP",
+            halign="left",
+            valign="middle"
         )
 
         self.meeting_place_label = Label(
             text="場所: 読み込み中…",
-            size_hint=(None, None),
-            size=(600, 30),
+            size_hint=(1, None),
+            height=dp(30),
             pos_hint={'x': 0.03, 'center_y': 0.15},
             color=(0.2, 0.2, 0.2, 1),
-            font_size=18,
-            font_name="NotoSansJP"
+            font_size=39,
+            font_name="NotoSansJP",
+            halign="left",
+            valign="middle"
         )
+
+        # self.meeting_place_label = Label(
+        #     text="場所: 読み込み中…",
+        #     size_hint=(None, None),
+        #     size=(600, 30),
+        #     pos_hint={'x': 0, 'center_y': 0.15},
+        #     color=(0.2, 0.2, 0.2, 1),
+        #     font_size=45,
+        #     font_name="NotoSansJP"
+        # )
 
         self.end_button = Button(
             text="終了",
             size_hint=(None, None),
-            size=(140, 60),
+            size=(160, 80),
             pos_hint={'right': 0.97, 'center_y': 0.5},
             background_normal="",
             background_color=(0.671, 0.905, 0.510, 1),
             color=(0, 0, 0, 1),
-            font_size=20,
+            font_size=50,
             font_name="NotoSansJP"
         )
 
@@ -312,6 +335,10 @@ class MainScreen(FloatLayout):
     def _update_meeting_bg(self, *args):
         self.meeting_bg.size = self.meeting_bar.size
         self.meeting_bg.pos = self.meeting_bar.pos
+        width = self.meeting_bar.width * 0.9  # 左右に余白を作る
+        self.meeting_friend_label.text_size = (width, None)
+        self.meeting_place_label.text_size = (width, None)
+
 
     # -------------------------
     # 自分・相手のマーカー追加
