@@ -8,6 +8,8 @@ from kivy.uix.stencilview import StencilView
 from kivy.core.window import Window
 from kivy.config import Config
 from kivy.clock import Clock
+from kivy.metrics import dp
+from kivy.utils import get_color_from_hex
 import random
 import requests
 import json
@@ -149,23 +151,22 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
     def __init__(self, icon_url, friend_mail, app_instance, **kwargs):
         super().__init__(**kwargs)
 
-        self.size = (100, 100)
+        self.size = (dp(56), dp(56))
         self.friend_mail = friend_mail
         self.app_instance = app_instance
 
-        # 丸マスク
         with self.canvas.before:
+            # 外枠（薄い緑）
+            Color(*get_color_from_hex('#D1EFC7'))
+            self.outer = Ellipse(
+                size=(self.size[0] + dp(8), self.size[1] + dp(8)),
+                pos=(self.pos[0] - dp(4), self.pos[1] - dp(4))
+            )
             StencilPush()
             self.mask = Ellipse(size=self.size, pos=self.pos)
             StencilUse()
 
-        # アイコン画像
-        self.image = AsyncImage(
-            source=icon_url,
-            allow_stretch=True,
-            keep_ratio=False,
-            size=self.size,
-        )
+        self.image = AsyncImage(source=icon_url, allow_stretch=True, keep_ratio=False, size=self.size)
         self.add_widget(self.image)
 
         with self.canvas.after:
@@ -179,6 +180,8 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
         self.mask.size = self.size
         self.image.pos = self.pos
         self.image.size = self.size
+        self.outer.pos = (self.pos[0] - dp(4), self.pos[1] - dp(4))
+        self.outer.size = (self.size[0] + dp(8), self.size[1] + dp(8))
 
     def on_press(self):
         print("🧑 フレンドアイコン押された:", self.friend_mail)
@@ -503,9 +506,8 @@ class MainScreen(FloatLayout):
             self.my_marker.lon = lon
             print(f"🗺️  [マーカー更新] 緯度: {lat:.6f}, 経度: {lon:.6f}")
         else:
-            self.my_marker = MapMarker(lat=lat, lon=lon, source="img/pin.png")
-            self.mapview.add_marker(self.my_marker)
-            print(f"📍 [マーカー作成] 緯度: {lat:.6f}, 経度: {lon:.6f}")
+            # 赤いピン表示は不要のためマーカー作成をスキップ
+            print(f"📍 [マーカー作成スキップ] 緯度: {lat:.6f}, 経度: {lon:.6f}")
         # 現在の座標を保持
         self.lat = lat
         self.lon = lon
