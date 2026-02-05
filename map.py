@@ -300,6 +300,34 @@ class MainScreen(FloatLayout):
             except:
                 pass
     
+    def resume_updates(self):
+        """画面復帰時に定期処理を再開（2回目以降のmeetingを検出するために必須）"""
+        print("📍 map.pyの定期处理を再開します")
+        
+        # 既に実行中のイベントをキャンセル（二重スケジュール防止）
+        if hasattr(self, 'friend_update_event'):
+            self.friend_update_event.cancel()
+        if hasattr(self, 'send_location_event'):
+            self.send_location_event.cancel()
+        if hasattr(self, 'meeting_check_event'):
+            self.meeting_check_event.cancel()
+        if hasattr(self, 'location_event') and HAS_GPS == False:
+            self.location_event.cancel()
+        
+        # 定期処理を再開
+        self.friend_update_event = Clock.schedule_interval(self.update_friends, 15)
+        self.send_location_event = Clock.schedule_interval(self.send_my_location, 30)
+        self.meeting_check_event = Clock.schedule_interval(self.check_for_active_meeting, 10)
+        
+        if not HAS_GPS:
+            self.location_event = Clock.schedule_interval(self.simulate_location, 3)
+        else:
+            try:
+                gps.start()
+            except:
+                pass
+        
+        print("✅ 定期処理を再開しました")
 
     def initialize_user_location_on_open(self):
         """Map画面オープン時にユーザーの位置情報をlocationテーブルに初期化し、user_idを取得"""

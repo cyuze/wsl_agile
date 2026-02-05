@@ -380,11 +380,20 @@ class MainScreen(FloatLayout):
     
     def _return_to_map(self):
         """map画面に戻る処理"""
+        # meeting_status_check_eventをキャンセル（重要：2回目以降の自動化に必須）
+        if hasattr(self, 'meeting_status_check_event') and self.meeting_status_check_event:
+            self.meeting_status_check_event.cancel()
+            print("✅ check_meeting_status イベントをキャンセルしました")
+        
         if self.app_instance:
             from kivy.uix.screenmanager import ScreenManager
             if isinstance(self.app_instance.root, ScreenManager):
                 # mapスクリーンが存在するか確認
                 if self.app_instance.root.has_screen("map"):
+                    # mapスクリーンの定期処理を再開（重要：2回目以降の自動化に必須）
+                    if hasattr(self.app_instance, 'main_screen') and hasattr(self.app_instance.main_screen, 'resume_updates'):
+                        self.app_instance.main_screen.resume_updates()
+                        print("📍 map.pyの定期処理を再開しました")
                     self.app_instance.root.current = "map"
                 else:
                     # mapスクリーンがない場合は作成
