@@ -274,6 +274,9 @@ class MainScreen(FloatLayout):
         self.friend_update_event = Clock.schedule_interval(self.update_friends, 15)
         self.send_location_event = Clock.schedule_interval(self.send_my_location, 30)
         
+        # アクティブな会議チェック: 10秒ごと（新しい待ち合わせが共有されたら自動遷移）
+        self.meeting_check_event = Clock.schedule_interval(self.check_for_active_meeting, 10)
+        
         # マップ表示時に1回位置を送信
         Clock.schedule_once(lambda dt: self.send_my_location(dt), 0.5)
         
@@ -287,6 +290,8 @@ class MainScreen(FloatLayout):
             self.friend_update_event.cancel()
         if hasattr(self, 'send_location_event'):
             self.send_location_event.cancel()
+        if hasattr(self, 'meeting_check_event'):
+            self.meeting_check_event.cancel()
         if hasattr(self, 'location_event'):
             self.location_event.cancel()
         if HAS_GPS:
@@ -359,6 +364,46 @@ class MainScreen(FloatLayout):
         print("⚙️ 設定ボタンが押されました")
         if self.app_instance:
             self.app_instance.open_settings()
+    
+    # ===========================================================
+    # アクティブな会議チェック（定期実行）
+    # ===========================================================
+    def check_for_active_meeting(self, dt):
+        """定期的にアクティブな会議があるかチェックし、あればmap3に自動遷移"""
+        try:
+            # users.jsonからメールアドレスを取得
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and len(data) > 0:
+                user_mail = data[0].get("user_mail")
+            else:
+                user_mail = data.get("user_mail")
+            
+            if not user_mail:
+                return
+            
+            # meeting_sharesテーブルをチェック
+            from map_2_service import check_meeting_shares_status
+            has_active_meeting = check_meeting_shares_status(user_mail)
+            
+            if has_active_meeting:
+                print("✅ 新しいアクティブな会議が検出されました → map3へ自動遷移")
+                # 定期処理を停止
+                self.stop_updates()
+                
+                # meeting_idを取得してmap3へ遷移
+                from map3_service import get_active_meeting_info
+                meeting_info = get_active_meeting_info(user_mail)
+                
+                if meeting_info and self.app_instance:
+                    meeting_id = meeting_info.get("meeting_id")
+                    # map3へ遷移（メインスレッドで実行）
+                    Clock.schedule_once(lambda dt: self.app_instance.open_map3(meeting_id=meeting_id), 0)
+        
+        except FileNotFoundError:
+            pass  # users.jsonがない場合は何もしない
+        except Exception as e:
+            print(f"⚠️ check_for_active_meeting error: {e}")
 
 
     # ===========================================================

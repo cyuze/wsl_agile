@@ -273,6 +273,11 @@ class MainScreen(FloatLayout):
         # Supabase から meeting 情報を読み込み
         # -------------------------
         Clock.schedule_once(lambda dt: self.load_meeting_info(), 0.5)
+        
+        # -------------------------
+        # 定期的に会議ステータスをチェック（相手が終了したら自動で戻る）
+        # -------------------------
+        self.meeting_status_check_event = Clock.schedule_interval(self.check_meeting_status, 5)
 
     # -------------------------
     # meeting 情報読み込み
@@ -329,6 +334,78 @@ class MainScreen(FloatLayout):
             import traceback
             traceback.print_exc()
 
+    # -------------------------
+    # 会議ステータスチェック（定期実行）
+    # -------------------------
+    def check_meeting_status(self, dt):
+        """定期的に会議のステータスをチェックし、終了していたらmap画面に戻る"""
+        try:
+            if not self.meeting_id:
+                return
+            
+            import json
+            import requests
+            
+            # Supabase設定
+            SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
+            SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
+            
+            # meeting_sharesテーブルでこのmeeting_idのstatusがtrueのレコードがあるかチェック
+            url = f"{SUPABASE_URL}/rest/v1/meeting_shares"
+            headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+            params = {
+                "select": "id,status",
+                "meeting_id": f"eq.{self.meeting_id}",
+                "status": "eq.true"
+            }
+            
+            res = requests.get(url, headers=headers, params=params)
+            if res.status_code == 200:
+                data = res.json()
+                # statusがtrueのレコードがなければ、会議は終了している
+                if not data or len(data) == 0:
+                    print("⚠️ 会議が終了しました - map画面に自動で戻ります")
+                    # 定期チェックを停止
+                    if hasattr(self, 'meeting_status_check_event'):
+                        self.meeting_status_check_event.cancel()
+                    
+                    # map画面に戻る
+                    if self.app_instance:
+                        Clock.schedule_once(lambda dt: self._return_to_map(), 0)
+        
+        except FileNotFoundError:
+            pass  # users.jsonがない場合は何もしない
+        except Exception as e:
+            print(f"⚠️ check_meeting_status error: {e}")
+    
+    def _return_to_map(self):
+        """map画面に戻る処理"""
+        if self.app_instance:
+            from kivy.uix.screenmanager import ScreenManager
+            if isinstance(self.app_instance.root, ScreenManager):
+                # mapスクリーンが存在するか確認
+                if self.app_instance.root.has_screen("map"):
+                    self.app_instance.root.current = "map"
+                else:
+                    # mapスクリーンがない場合は作成
+                    from kivy.uix.screenmanager import Screen
+                    from map import MainScreen as MapMainScreen
+                    
+                    class MapScreen(Screen):
+                        def __init__(self, app_inst, **kwargs):
+                            super().__init__(name="map", **kwargs)
+                            app_inst.main_screen = MapMainScreen(
+                                app_instance=app_inst, 
+                                current_user=app_inst.current_user
+                            )
+                            self.add_widget(app_inst.main_screen)
+                    
+                    map_screen = MapScreen(app_inst=self.app_instance)
+                    self.app_instance.root.add_widget(map_screen)
+                    self.app_instance.root.current = "map"
+            else:
+                self.app_instance.back_to_map()
+    
     # -------------------------
     # 上部バー背景更新
     # -------------------------
