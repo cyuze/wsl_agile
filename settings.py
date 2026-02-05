@@ -167,35 +167,7 @@ class SettingsScreen(Screen):
         except Exception as e:
             print("設定画面のユーザー情報更新エラー:", e)
             
-    def load_settings(self):
-        if not os.path.exists("settings.json"):
-            return False  # デフォルトOFF
-
-        try:
-            with open("settings.json", "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("meetup_time", False)
-        except Exception as e:
-            print(f"設定読み込みエラー: {e}")
-            return False
-    def save_settings(self, value):
-        data = {
-            "meetup_time": value
-        }
-        try:
-            with open("settings.json", "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            print("✅ settings.json に保存しました")
-        except Exception as e:
-            print(f"設定保存エラー: {e}")
-            
-    def on_switch_active(self, instance, value):
-        if self.initializing:
-            return  # 起動時のactive設定では保存しない
-
-        print(f"待ち合わせ時間 Switch: {value}")
-        self.save_settings(value)
-
+    
 
     def build_ui(self):
         # ... 既存のUI構築コード ...
@@ -316,40 +288,6 @@ class SettingsScreen(Screen):
         inner_layout.add_widget(edit_button2)
         edit_layout.add_widget(inner_layout)
         root_layout.add_widget(edit_layout)
-
-        # プライバシー
-        root_layout.add_widget(left_label("プライバシー"))
-        privacy_layout = GridLayout(
-            cols=2, spacing=Sdp(20), size_hint_y=None, height=Sdp(80)
-        )
-        privacy_layout.add_widget(left_label("位置情報の表示"))
-        self.initializing = True
-
-        self.meetup_switch = Switch(active=False)
-
-        # 🔹 保存済みの状態を復元
-        saved_value = self.load_settings()
-        self.meetup_switch.active = saved_value
-
-        self.initializing = False
-
-        # 🔹 状態変化を監視
-        self.meetup_switch.bind(active=self.on_switch_active)
-        self.initializing = True
-
-        self.meetup_switch = Switch(active=False)
-
-        # 🔹 保存済みの状態を復元
-        saved_value = self.load_settings()
-        self.meetup_switch.active = saved_value
-
-        self.initializing = False
-
-        # 🔹 状態変化を監視
-        self.meetup_switch.bind(active=self.on_switch_active)
-        privacy_layout.add_widget(self.meetup_switch)
-        root_layout.add_widget(privacy_layout)
-
         # 確定
         root_layout.add_widget(
             RoundedButton(
@@ -394,11 +332,6 @@ class SettingsScreen(Screen):
         print("名前編集ボタンが押されました。編集ダイアログを表示します。")
         self.show_name_edit_dialog()
         
-    def on_switch_active_priv(self, instance, value):
-        if value:
-            print("プライバシースイッチON")
-        else:
-            print("プライバシースイッチOFF")
 
 
 
