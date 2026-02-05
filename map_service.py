@@ -38,7 +38,11 @@ def initialize_user_location(user_mail, initial_lat=None, initial_lon=None):
         if initial_lat is None or initial_lon is None:
             # GPS待ちモード：初期値がないため、位置情報がGPSで取得されるまで待つ
             print(f"⚠️ map_service.initialize_user_location: {user_mail} の位置情報はGPS取得待ち（初期値なし）")
-            return False
+            # return False
+            # 強制的に位置を登録(locationに反映させるため)
+            initial_lat = 35.681236
+            initial_lon = 139.767125
+
         
         # 初期座標が指定されている場合のみ作成
         loc_str = "{" + f"{initial_lat},{initial_lon}" + "}"
