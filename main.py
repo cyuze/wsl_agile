@@ -437,9 +437,15 @@ class WaitingApp(App):
         if isinstance(self.root, ScreenManager):
             screen_name = "map3"
             
-            # 既存のmap3スクリーンを削除
+            # 既存のmap3スクリーンを削除（古いClockイベントもキャンセル）
             if self.root.has_screen(screen_name):
-                self.root.remove_widget(self.root.get_screen(screen_name))
+                old_screen = self.root.get_screen(screen_name)
+                # 古いmain_screenのmeting_status_check_eventをキャンセル
+                if hasattr(old_screen, 'main_screen') and hasattr(old_screen.main_screen, 'meeting_status_check_event'):
+                    if old_screen.main_screen.meeting_status_check_event:
+                        old_screen.main_screen.meeting_status_check_event.cancel()
+                        print("🛑 前のmeetingのステータスチェックイベントをキャンセルしました")
+                self.root.remove_widget(old_screen)
             
             class Map3ScreenWrapper(Screen):
                 def __init__(self, app_inst, meeting_id, **kwargs):

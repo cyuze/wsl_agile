@@ -110,6 +110,11 @@ class MainScreenLogic:
         print("🛑 待ち合わせ終了")
         
         try:
+            # meeting_status_check_eventをキャンセル（重要：2回目以降の自動化に必須）
+            if hasattr(self.screen, 'meeting_status_check_event') and self.screen.meeting_status_check_event:
+                self.screen.meeting_status_check_event.cancel()
+                print("✅ meeting_status_check_eventをキャンセルしました")
+            
             # screenからmeeting_idを取得
             meeting_id = getattr(self.screen, 'meeting_id', None)
             
@@ -180,6 +185,10 @@ class MainScreenLogic:
                 
                 # mapスクリーンが存在するか確認
                 if self.app.root.has_screen("map"):
+                    # mapスクリーンの定期処理を再開（重要：2回目以降の自動化に必須）
+                    if hasattr(self.app, 'main_screen') and hasattr(self.app.main_screen, 'resume_updates'):
+                        self.app.main_screen.resume_updates()
+                        print("📍 map.pyの定期処理を再開しました")
                     self.app.root.current = "map"
                 else:
                     # mapスクリーンがない場合は作成

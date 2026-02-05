@@ -120,6 +120,12 @@ class RoundedButton(Button):
 class FriendProfileScreen(Screen):
     def __init__(self, friend_mail=None, app_instance=None, **kwargs):
         super().__init__(**kwargs)
+        
+        # 背景色を設定（重要：2回目以降の背景色問題を修正）
+        with self.canvas.before:
+            Color(236/255, 244/255, 232/255, 1)
+            self.bg_rect = RoundedRectangle(size=self.size, pos=self.pos)
+        self.bind(size=self._update_bg, pos=self._update_bg)
 
         self.friend_mail = friend_mail
         self.app_instance = app_instance
@@ -223,6 +229,15 @@ class FriendProfileScreen(Screen):
         root_layout.add_widget(row2)
 
         self.add_widget(anchor)
+    
+    def _update_bg(self, *args):
+        """背景矩形を更新"""
+        self.bg_rect.size = self.size
+        self.bg_rect.pos = self.pos
+    
+    def on_enter(self):
+        """画面遷移時に背景色を設定（2回目以降の背景色問題を修正）"""
+        Window.clearcolor = (236/255, 244/255, 232/255, 1)
 
     def on_chat_press(self, instance):
         print("チャットを開始（相手メール →", self.friend_mail, ")")
