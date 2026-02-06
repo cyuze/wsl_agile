@@ -15,6 +15,7 @@ from kivy.metrics import dp, sp
 from kivy.uix.screenmanager import Screen
 from kivy.clock import Clock
 
+import json
 import requests
 
 
@@ -256,6 +257,43 @@ class FriendProfileScreen(Screen):
 
     def on_delete_press(self, instance):
         print("友達削除：", self.friend_mail)
+        instance.disabled = True
+        try:
+            with open("users.json", "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and data:
+                my_mail = data[0].get("user_mail")
+            else:
+                my_mail = data.get("user_mail")
+
+            if not my_mail or not self.friend_mail:
+                print("⚠️ user_mail が取得できません")
+                instance.disabled = False
+                return
+
+            url = f"{SUPABASE_URL}/rest/v1/friend"
+            params = {
+                "or": (
+                    f"(and(send_user.eq.{my_mail},recive_user.eq.{self.friend_mail}),"
+                    f"and(send_user.eq.{self.friend_mail},recive_user.eq.{my_mail}))"
+                )
+            }
+            data = {"permission": False}
+            headers_patch = headers.copy()
+            headers_patch["Content-Type"] = "application/json"
+
+            res = requests.patch(url, headers=headers_patch, params=params, json=data, timeout=10)
+            print(f"📡 削除応答: status={res.status_code}")
+            if res.status_code in (200, 204):
+                print("✅ 友達削除成功（permission=false）")
+                if self.app_instance and hasattr(self.app_instance, "back_to_map"):
+                    self.app_instance.back_to_map()
+            else:
+                print(f"❌ 友達削除失敗: {res.status_code} {res.text}")
+                instance.disabled = False
+        except Exception as e:
+            print(f"❌ 友達削除エラー: {e}")
+            instance.disabled = False
 
 
 if __name__ == "__main__":
