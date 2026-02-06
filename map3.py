@@ -110,7 +110,6 @@ class FriendIconButton(ButtonBehavior, FloatLayout):
         self.outer.size = (self.size[0] + dp(8), self.size[1] + dp(8))
 
 
-
 class FriendMarker(MapMarker):
     def __init__(self, lat, lon, icon_url, friend_mail, app_instance, **kwargs):
         super().__init__(lat=lat, lon=lon, **kwargs)
@@ -142,8 +141,6 @@ class MainScreen(FloatLayout):
         print(f"🔍 DEBUG: map3.MainScreen initialized with meeting_id = {self.meeting_id}")
 
         Window.clearcolor = (1, 1, 1, 1)
-
-        # ... (以下のコードは変更なし)
 
         # -------------------------
         # MapView
@@ -177,17 +174,6 @@ class MainScreen(FloatLayout):
             font_name="NotoSansJP"
         )
 
-        # self.meeting_friend_label = Label(
-        #     text="相手: 読み込み中…",
-        #     size_hint=(None, None),
-        #     size=(600, 30),
-        #     pos_hint={'x': 0, 'center_y': 0.4},
-        #     color=(0.2, 0.2, 0.2, 1),
-        #     font_size=45,
-        #     font_name="NotoSansJP"
-        #     halign="left",
-        #     valign="middle"
-        # )
         self.meeting_friend_label = Label(
             text="相手: 読み込み中…",
             size_hint=(1, None),
@@ -211,16 +197,6 @@ class MainScreen(FloatLayout):
             halign="left",
             valign="middle"
         )
-
-        # self.meeting_place_label = Label(
-        #     text="場所: 読み込み中…",
-        #     size_hint=(None, None),
-        #     size=(600, 30),
-        #     pos_hint={'x': 0, 'center_y': 0.15},
-        #     color=(0.2, 0.2, 0.2, 1),
-        #     font_size=45,
-        #     font_name="NotoSansJP"
-        # )
 
         self.end_button = Button(
             text="終了",
@@ -284,18 +260,27 @@ class MainScreen(FloatLayout):
     # -------------------------
     def load_meeting_info(self):
         try:
-            import json  # ← 追加
+            import json
             with open("users.json", "r", encoding="utf-8") as f:
                 data = f.read()
             user = json.loads(data)[0]
             my_mail = user.get("user_mail")
 
-            info = get_active_meeting_info(my_mail)
+            print(f"🔍 DEBUG: load_meeting_info started for {my_mail}")
+            print(f"🔍 DEBUG: place_name = {self.place_name}")
+            
+            # place_nameを使って正しい会議を取得
+            info = get_active_meeting_info(my_mail, place_name=self.place_name)
             if info:
                 lat, lon = info["location"]
                 place_name = info["place_name"]
                 members = info["members"]
                 self.meeting_id = info["meeting_id"]
+
+                print(f"✅ Meeting info retrieved:")
+                print(f"   - Location: ({lat}, {lon})")
+                print(f"   - Place: {place_name}")
+                print(f"   - Members: {members}")
 
                 # マップの中心を待ち合わせ地点に移動
                 self.mapview.center_on(lat, lon)
@@ -303,7 +288,14 @@ class MainScreen(FloatLayout):
                 # 待ち合わせ地点にマーカーを追加
                 if self.meeting_marker:
                     self.mapview.remove_marker(self.meeting_marker)
-                self.meeting_marker = SmallPinMarker(lat=lat, lon=lon, source="img/red_pin.png")
+                
+                # red_pin.pngがない場合は通常のpin.pngを使用
+                try:
+                    self.meeting_marker = SmallPinMarker(lat=lat, lon=lon, source="img/red_pin.png")
+                except:
+                    print("⚠️ red_pin.png not found, using pin.png")
+                    self.meeting_marker = SmallPinMarker(lat=lat, lon=lon, source="img/pin.png")
+                
                 self.mapview.add_marker(self.meeting_marker)
                 print(f"📍 待ち合わせ地点マーカーを追加: ({lat}, {lon})")
                 
@@ -321,6 +313,7 @@ class MainScreen(FloatLayout):
                     self.meeting_friend_label.text = "相手: なし"
 
                 # 自分と相手の現在地マーカーを追加
+                print(f"🔍 DEBUG: Adding member markers...")
                 self._add_member_markers(my_mail, others)
                 
                 print(f"✅ 待ち合わせ情報を描画しました")
@@ -328,6 +321,8 @@ class MainScreen(FloatLayout):
                 print(f"   - 場所: {place_name}")
                 print(f"   - 座標: ({lat}, {lon})")
                 print(f"   - メンバー: {members}")
+            else:
+                print("⚠️ get_active_meeting_info returned None")
 
         except Exception as e:
             print(f"⚠️ load_meeting_info error: {e}")
@@ -374,13 +369,13 @@ class MainScreen(FloatLayout):
                         Clock.schedule_once(lambda dt: self._return_to_map(), 0)
         
         except FileNotFoundError:
-            pass  # users.jsonがない場合は何もしない
+            pass
         except Exception as e:
             print(f"⚠️ check_meeting_status error: {e}")
     
     def _return_to_map(self):
         """map画面に戻る処理"""
-        # meeting_status_check_eventをキャンセル（重要：2回目以降の自動化に必須）
+        # すべてのイベントをキャンセル
         if hasattr(self, 'meeting_status_check_event') and self.meeting_status_check_event:
             self.meeting_status_check_event.cancel()
             print("✅ check_meeting_status イベントをキャンセルしました")
@@ -388,15 +383,12 @@ class MainScreen(FloatLayout):
         if self.app_instance:
             from kivy.uix.screenmanager import ScreenManager
             if isinstance(self.app_instance.root, ScreenManager):
-                # mapスクリーンが存在するか確認
                 if self.app_instance.root.has_screen("map"):
-                    # mapスクリーンの定期処理を再開（重要：2回目以降の自動化に必須）
                     if hasattr(self.app_instance, 'main_screen') and hasattr(self.app_instance.main_screen, 'resume_updates'):
                         self.app_instance.main_screen.resume_updates()
                         print("📍 map.pyの定期処理を再開しました")
                     self.app_instance.root.current = "map"
                 else:
-                    # mapスクリーンがない場合は作成
                     from kivy.uix.screenmanager import Screen
                     from map import MainScreen as MapMainScreen
                     
@@ -421,10 +413,9 @@ class MainScreen(FloatLayout):
     def _update_meeting_bg(self, *args):
         self.meeting_bg.size = self.meeting_bar.size
         self.meeting_bg.pos = self.meeting_bar.pos
-        width = self.meeting_bar.width * 0.9  # 左右に余白を作る
+        width = self.meeting_bar.width * 0.9
         self.meeting_friend_label.text_size = (width, None)
         self.meeting_place_label.text_size = (width, None)
-
 
     # -------------------------
     # 自分・相手のマーカー追加
@@ -486,7 +477,6 @@ class MyApp(App):
         request_location_permissions()
         self.main_screen = MainScreen(app_instance=self, friend_mail=self.friend_mail, place_name=self.place_name, meeting_id=meeting_id)
         return self.main_screen
-    
 
     def back_to_map(self):
         self.root.clear_widgets()
@@ -512,8 +502,6 @@ class MyApp(App):
         self.root.clear_widgets()
         from chat_screen import MainLayout
         self.root.add_widget(MainLayout(app_instance=self))
-        
-
 
 
 if __name__ == '__main__':

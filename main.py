@@ -668,19 +668,24 @@ class WaitingApp(App):
         if isinstance(self.root, ScreenManager):
             screen_name = "meeting_map"
 
-            if not self.root.has_screen(screen_name):
-                class MeetingMapScreen(Screen):
-                    def __init__(self, friend_mail, app_inst, **kwargs):
-                        super().__init__(name=screen_name, **kwargs)
-                        self.main_screen = MainScreen2(
-                            app_instance=app_inst,
-                            current_user=app_inst.current_user,
-                            friend_mail=friend_mail
-                        )
-                        self.add_widget(self.main_screen)
+            # 古いスクリーンを削除（前回の友達情報をクリア）
+            if self.root.has_screen(screen_name):
+                old_screen = self.root.get_screen(screen_name)
+                self.root.remove_widget(old_screen)
+                print(f"🗑️ 古い meeting_map スクリーンを削除しました")
 
-                new_screen = MeetingMapScreen(friend_mail, app_inst=self)
-                self.root.add_widget(new_screen)
+            class MeetingMapScreen(Screen):
+                def __init__(self, friend_mail, app_inst, **kwargs):
+                    super().__init__(name=screen_name, **kwargs)
+                    self.main_screen = MainScreen2(
+                        app_instance=app_inst,
+                        current_user=app_inst.current_user,
+                        friend_mail=friend_mail
+                    )
+                    self.add_widget(self.main_screen)
+
+            new_screen = MeetingMapScreen(friend_mail, app_inst=self)
+            self.root.add_widget(new_screen)
 
             self.root.current = screen_name
 
