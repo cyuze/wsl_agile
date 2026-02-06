@@ -598,17 +598,24 @@ class WaitingApp(App):
                 self.root.current = "map3"
             elif self.root.has_screen("map"):
                 self.root.current = "map"
+                map_screen = self.root.get_screen("map")
+                if hasattr(map_screen, "main_screen") and hasattr(map_screen.main_screen, "update_friends"):
+                    map_screen.main_screen.update_friends(0)
             else:
                 # fallback: デフォルトはmap画面を作成
                 from map import MainScreen
                 self.root.clear_widgets()
                 self.main_screen = MainScreen(app_instance=self, current_user=self.current_user)
                 self.root.add_widget(self.main_screen)
+                if hasattr(self.main_screen, "update_friends"):
+                    self.main_screen.update_friends(0)
         else:
             from map import MainScreen
             self.root.clear_widgets()
             self.main_screen = MainScreen(app_instance=self, current_user=self.current_user)
             self.root.add_widget(self.main_screen)
+            if hasattr(self.main_screen, "update_friends"):
+                self.main_screen.update_friends(0)
 
 
     def open_settings(self):

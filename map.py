@@ -545,6 +545,14 @@ class MainScreen(FloatLayout):
             # user_mail から友人のメールアドレスを取得
             friends_mail_list = fetch_friends_by_mail(user_mail)
             print(f"🔍 DEBUG: Found {len(friends_mail_list)} friends for {user_mail}")
+
+            # 友だち一覧から外れたマーカーを削除
+            current_friends = set(friends_mail_list)
+            for existing_mail in list(self.friend_markers.keys()):
+                if existing_mail not in current_friends:
+                    marker = self.friend_markers.pop(existing_mail)
+                    self.mapview.remove_marker(marker)
+                    print(f"🗑️ update_friends: removed marker for {existing_mail}")
             
             # friends_mail_list は既にメールアドレスなので、そのまま使用
             for friend_mail in friends_mail_list:
