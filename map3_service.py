@@ -25,15 +25,16 @@ def request_location_permissions():
 # Supabase 設定
 # ============================
 SUPABASE_URL = "https://impklpvfmyvydnoayhfj.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"  # ← map3.py と合わせてね
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltcGtscHZmbXl2eWRub2F5aGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIzOTcyNzUsImV4cCI6MjA3Nzk3MzI3NX0.-z8QMhOvgRotNl7nFGm_ijj1SQIuhVuCMoa9_UXKci4"
 
 
 # ============================
 # meeting 情報取得
 # ============================
-def get_active_meeting_info(user_mail):
+def get_active_meeting_info(user_mail, place_name=None):
     """
     自分が参加しているアクティブな meeting の情報を取得
+    place_name: 場所の名前（指定時はこれにマッチする会議を返す）
     Returns:
         {
             "meeting_id": str,
@@ -56,7 +57,30 @@ def get_active_meeting_info(user_mail):
             print("⚠️ meeting_shares にアクティブな共有が見つかりません")
             return None
 
-        meeting_id = res.json()[0].get("meeting_id")
+        meeting_ids = [r.get("meeting_id") for r in res.json() if r.get("meeting_id")]
+        
+        if not meeting_ids:
+            return None
+        
+        # place_nameが指定されている場合は、それに該当するmeeting_idを探す
+        meeting_id = None
+        if place_name:
+            url_meetings = f"{SUPABASE_URL}/rest/v1/meetings"
+            for mid in meeting_ids:
+                params_temp = {
+                    "select": "place_name",
+                    "id": f"eq.{mid}"
+                }
+                res_temp = requests.get(url_meetings, headers=headers, params=params_temp)
+                if res_temp.status_code == 200 and res_temp.json():
+                    temp_place = res_temp.json()[0].get("place_name", "")
+                    if temp_place == place_name:
+                        meeting_id = mid
+                        break
+        
+        # place_nameで見つからなかった場合は最初のmeeting_idを使用
+        if not meeting_id:
+            meeting_id = meeting_ids[0]
 
         # Step 2: meetings テーブルから場所情報を取得
         url_meetings = f"{SUPABASE_URL}/rest/v1/meetings"
@@ -110,7 +134,7 @@ class MainScreenLogic:
         print("🛑 待ち合わせ終了")
         
         try:
-            # meeting_status_check_eventをキャンセル（重要：2回目以降の自動化に必須）
+            # すべてのイベントをキャンセル（重要：2回目以降の自動化に必須）
             if hasattr(self.screen, 'meeting_status_check_event') and self.screen.meeting_status_check_event:
                 self.screen.meeting_status_check_event.cancel()
                 print("✅ meeting_status_check_eventをキャンセルしました")
