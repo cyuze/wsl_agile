@@ -278,21 +278,17 @@ class FriendProfileScreen(Screen):
                     f"and(send_user.eq.{self.friend_mail},recive_user.eq.{my_mail}))"
                 )
             }
-            data = {"permission": False}
-            headers_patch = headers.copy()
-            headers_patch["Content-Type"] = "application/json"
-
-            res = requests.patch(url, headers=headers_patch, params=params, json=data, timeout=10)
+            res = requests.delete(url, headers=headers, params=params, timeout=10)
             print(f"📡 削除応答: status={res.status_code}")
             if res.status_code in (200, 204):
-                print("✅ 友達削除成功（permission=false）")
+                print("✅ 友達削除成功（レコード削除）")
                 if self.app_instance and hasattr(self.app_instance, "back_to_map"):
                     self.app_instance.back_to_map()
             else:
                 print(f"❌ 友達削除失敗: {res.status_code} {res.text}")
-                instance.disabled = False
         except Exception as e:
             print(f"❌ 友達削除エラー: {e}")
+        finally:
             instance.disabled = False
 
 
